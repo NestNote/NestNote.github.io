@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta id="metaThemeColor" name="theme-color" content="#0f1115">
+    <meta id="metaThemeColor" name="theme-color" content="#FAF8F3">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/manifest.json">
@@ -13,37 +13,87 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        :root, .theme-dark {
+        :root, .theme-bone {
+            --bg-outer: #EAE6DC;
+            --bg-screen: #FAF8F3;
+            --bg-hero: #F3EFE4;
+            --bg-card: #FFFFFF;
+            --border-card: #1C1B19;
+            --border-soft: #DFDBD0;
+            --border-ink: #1C1B19;
+            --ring-ink: #1C1B19;
+            --shadow-card: 2px 2px 0 #D4CFC2;
+            --cta-lip: #D4CFC2;
+            --bg-sub: #F3EFE4;
+            --bg-circle: #FFFFFF;
+            --fg-primary: #1C1B19;
+            --fg-muted: #6B675E;
+            --bg-nav: rgba(250, 248, 243, 0.97);
+            --border-nav: #1C1B19;
+            --bg-sheet: #FAF8F3;
+            --border-sheet: #1C1B19;
+            --bg-input: #FFFFFF;
+            --border-input: #C9C3B4;
+            --accent-blue: #1C1B19;
+            --accent-blue-text: #A83328;
+            --accent-crimson: #A83328;
+            --accent-teal: #276649;
+            --accent-warn: #B45309;
+            --accent-danger: #A83328;
+            --pill-bg: #1C1B19;
+            --pill-fg: #FAF8F3;
+            --chip-active-bg: #1C1B19;
+            --chip-active-fg: #FAF8F3;
+            --chart-line: #1C1B19;
+            --chart-fill: rgba(168, 51, 40, 0.14);
+            color-scheme: light;
+        }
+        .theme-dark {
             --bg-outer: #07080a;
             --bg-screen: #0f1115;
+            --bg-hero: #161922;
             --bg-card: #191c24;
-            --border-card: rgba(255, 255, 255, 0.07);
+            --border-card: rgba(255, 255, 255, 0.09);
+            --border-soft: rgba(255, 255, 255, 0.08);
+            --border-ink: rgba(255, 255, 255, 0.14);
+            --ring-ink: rgba(255, 255, 255, 0.25);
             --shadow-card: none;
+            --cta-lip: rgba(0, 0, 0, 0.4);
             --bg-sub: #232732;
             --bg-circle: #202531;
             --fg-primary: #ffffff;
             --fg-muted: #8e96a8;
             --bg-nav: rgba(15, 17, 21, 0.96);
-            --border-nav: rgba(255, 255, 255, 0.08);
+            --border-nav: rgba(255, 255, 255, 0.09);
             --bg-sheet: #191c24;
-            --border-sheet: rgba(255, 255, 255, 0.09);
+            --border-sheet: rgba(255, 255, 255, 0.1);
             --bg-input: #0f1115;
             --border-input: #323846;
             --accent-blue: #3b82f6;
             --accent-blue-text: #60a5fa;
+            --accent-crimson: #f87171;
             --accent-teal: #2dd4bf;
             --accent-warn: #fbbf24;
             --accent-danger: #ef4444;
             --pill-bg: #ffffff;
             --pill-fg: #0f1115;
+            --chip-active-bg: #3b82f6;
+            --chip-active-fg: #ffffff;
+            --chart-line: #60a5fa;
+            --chart-fill: rgba(59, 130, 246, 0.22);
             color-scheme: dark;
         }
         .theme-light {
             --bg-outer: #e5e7eb;
             --bg-screen: #f4f5f7;
+            --bg-hero: #ffffff;
             --bg-card: #ffffff;
             --border-card: #e5e7eb;
+            --border-soft: #eef0f4;
+            --border-ink: #cbd5e1;
+            --ring-ink: #94a3b8;
             --shadow-card: 0 2px 10px rgba(15, 23, 42, 0.04);
+            --cta-lip: #cbd5e1;
             --bg-sub: #eef0f4;
             --bg-circle: #ffffff;
             --fg-primary: #0f172a;
@@ -56,18 +106,29 @@
             --border-input: #cbd5e1;
             --accent-blue: #2563eb;
             --accent-blue-text: #2563eb;
+            --accent-crimson: #dc2626;
             --accent-teal: #0d9488;
             --accent-warn: #d97706;
             --accent-danger: #dc2626;
             --pill-bg: #0f172a;
             --pill-fg: #ffffff;
+            --chip-active-bg: #2563eb;
+            --chip-active-fg: #ffffff;
+            --chart-line: #2563eb;
+            --chart-fill: rgba(37, 99, 235, 0.16);
             color-scheme: light;
         }
         .theme-mint {
             --bg-outer: #031713;
             --bg-screen: #06241f;
+            --bg-hero: #0a2d26;
             --bg-card: #0d3830;
-            --border-card: rgba(74, 222, 128, 0.14);
+            --border-card: rgba(74, 222, 128, 0.16);
+            --border-soft: rgba(74, 222, 128, 0.12);
+            --border-ink: rgba(74, 222, 128, 0.25);
+            --ring-ink: rgba(74, 222, 128, 0.35);
+            --shadow-card: none;
+            --cta-lip: rgba(0, 0, 0, 0.3);
             --bg-sub: #0a2d26;
             --bg-circle: #0f4238;
             --fg-primary: #f0fdf4;
@@ -80,18 +141,29 @@
             --border-input: #1f6b5c;
             --accent-blue: #10b981;
             --accent-blue-text: #34d399;
+            --accent-crimson: #fb7185;
             --accent-teal: #4ade80;
             --accent-warn: #fbbf24;
             --accent-danger: #fb7185;
             --pill-bg: #34d399;
             --pill-fg: #022c22;
+            --chip-active-bg: #10b981;
+            --chip-active-fg: #022c22;
+            --chart-line: #34d399;
+            --chart-fill: rgba(52, 211, 153, 0.18);
             color-scheme: dark;
         }
         .theme-warm {
             --bg-outer: #141110;
             --bg-screen: #1c1917;
+            --bg-hero: #24201e;
             --bg-card: #292524;
-            --border-card: rgba(255, 255, 255, 0.08);
+            --border-card: rgba(255, 255, 255, 0.1);
+            --border-soft: rgba(255, 255, 255, 0.08);
+            --border-ink: rgba(255, 255, 255, 0.16);
+            --ring-ink: rgba(251, 146, 60, 0.45);
+            --shadow-card: none;
+            --cta-lip: rgba(0, 0, 0, 0.35);
             --bg-sub: #342f2d;
             --bg-circle: #36302d;
             --fg-primary: #fafaf9;
@@ -104,11 +176,16 @@
             --border-input: #57534e;
             --accent-blue: #f97316;
             --accent-blue-text: #fb923c;
+            --accent-crimson: #fb7185;
             --accent-teal: #2dd4bf;
             --accent-warn: #fbbf24;
             --accent-danger: #fb7185;
             --pill-bg: #fafaf9;
             --pill-fg: #1c1917;
+            --chip-active-bg: #f97316;
+            --chip-active-fg: #ffffff;
+            --chart-line: #fb923c;
+            --chart-fill: rgba(249, 115, 22, 0.2);
             color-scheme: dark;
         }
 
@@ -120,6 +197,10 @@
             margin: 0;
             padding: 0;
             transition: background-color 300ms ease, color 240ms ease;
+        }
+        .chrono-serif-italic {
+            font-family: Georgia, 'Times New Roman', serif;
+            font-style: italic;
         }
         .mobile-shell {
             max-width: 460px;
@@ -135,9 +216,9 @@
         }
         @media (min-width: 520px) {
             .mobile-shell {
-                border-left: 1px solid var(--border-card);
-                border-right: 1px solid var(--border-card);
-                box-shadow: 0 25px 60px rgba(0,0,0,0.35);
+                border-left: 1.5px solid var(--border-ink);
+                border-right: 1.5px solid var(--border-ink);
+                box-shadow: 0 24px 60px rgba(28, 27, 25, 0.14);
             }
         }
         .rev-card {
@@ -150,8 +231,10 @@
         .rev-sub {
             background-color: var(--bg-sub);
             color: var(--fg-primary);
+            border: 1px solid var(--border-soft);
             transition: background-color 260ms ease, color 220ms ease, border-color 240ms ease, transform 200ms ease;
         }
+        .rev-divider { border-color: var(--border-soft); }
         .rev-input {
             background-color: var(--bg-input);
             border: 1px solid var(--border-input);
@@ -159,7 +242,7 @@
             transition: background-color 240ms ease, border-color 220ms ease, box-shadow 220ms ease, color 220ms ease;
         }
         .rev-input::placeholder { color: var(--fg-muted); opacity: 0.9; }
-        .rev-input:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25); }
+        .rev-input:focus { outline: none; border-color: var(--border-ink); box-shadow: 0 0 0 2px rgba(168, 51, 40, 0.18); }
         .rev-muted { color: var(--fg-muted); }
         .rev-nav {
             background-color: var(--bg-nav);
@@ -170,32 +253,39 @@
         .rev-pill-primary {
             background-color: var(--pill-bg);
             color: var(--pill-fg);
+            border: 1.5px solid var(--border-ink);
+            box-shadow: 2px 2px 0 var(--cta-lip);
+        }
+        .rev-pill-outline {
+            background-color: var(--bg-card);
+            color: var(--fg-primary);
+            border: 1.5px solid var(--border-ink);
         }
         .rev-sheet {
             background-color: var(--bg-sheet);
             color: var(--fg-primary);
-            border-top: 1px solid var(--border-sheet);
+            border-top: 1.5px solid var(--border-sheet);
             transition: background-color 280ms ease, color 240ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 210ms ease;
         }
         .q-circle {
-            background-color: var(--bg-circle);
+            background-color: var(--bg-card);
             color: var(--fg-primary);
-            border: 1px solid var(--border-card);
-            transition: background-color 280ms cubic-bezier(0.22, 1, 0.36, 1), color 220ms ease, border-color 240ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 260ms ease;
+            border: 1.5px solid var(--border-ink);
+            transition: background-color 240ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms ease, border-color 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease;
         }
         .q-circle.q-active {
-            background-color: var(--accent-blue);
+            background-color: var(--accent-crimson);
             color: #ffffff;
-            border-color: transparent;
-            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35);
+            border-color: var(--border-ink);
+            box-shadow: 2px 2px 0 var(--border-ink);
         }
         button, input, a {
             transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 260ms ease, color 200ms ease, border-color 220ms ease, opacity 200ms ease, box-shadow 240ms ease;
         }
-        button:active { transform: scale(0.96); }
+        button:active { transform: scale(0.97); }
 
         #sheetOverlay, .modal-backdrop {
-            background: rgba(0, 0, 0, 0.58);
+            background: rgba(28, 27, 25, 0.45);
             backdrop-filter: blur(4px);
             transition: opacity 210ms ease;
         }
@@ -221,7 +311,7 @@
         }
         @keyframes pulseLogo {
             0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.05); opacity: 0.9; }
+            50% { transform: scale(1.04); opacity: 0.94; }
         }
         .anim-tab { animation: chronoTabIn 280ms cubic-bezier(0.22, 1, 0.36, 1); }
         .anim-sheet { animation: chronoSheetIn 320ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -232,12 +322,12 @@
         .chip-btn {
             background-color: var(--bg-sub);
             color: var(--fg-primary);
-            border: 1px solid transparent;
+            border: 1px solid var(--border-soft);
         }
         .chip-btn.chip-selected {
-            background-color: var(--accent-blue);
-            color: #ffffff;
-            border-color: transparent;
+            background-color: var(--chip-active-bg);
+            color: var(--chip-active-fg);
+            border-color: var(--chip-active-bg);
         }
         .chip-btn.chip-teal {
             border-color: var(--accent-teal);
@@ -249,17 +339,21 @@
         }
     </style>
 </head>
-<body class="theme-dark antialiased h-full m-0 p-0">
+<body class="theme-bone antialiased h-full m-0 p-0">
     <script>
         (function () {
-            var t = localStorage.getItem('ps_theme') || 'dark';
-            if (['dark', 'light', 'mint', 'warm'].indexOf(t) === -1) t = 'dark';
+            if (!localStorage.getItem('ps_bone_default_applied')) {
+                localStorage.setItem('ps_theme', 'bone');
+                localStorage.setItem('ps_bone_default_applied', '1');
+            }
+            var t = localStorage.getItem('ps_theme') || 'bone';
+            if (['bone', 'dark', 'light', 'mint', 'warm'].indexOf(t) === -1) t = 'bone';
             document.body.className = 'theme-' + t + ' antialiased h-full m-0 p-0';
         })();
     </script>
 
     <!-- Toast Notification -->
-    <div id="quickToast" class="fixed top-14 left-1/2 -translate-x-1/2 z-[120] font-bold text-xs px-4 py-2.5 rounded-full shadow-2xl transition-all duration-300 opacity-0 pointer-events-none" style="background:var(--accent-blue);color:#ffffff;">
+    <div id="quickToast" class="fixed top-14 left-1/2 -translate-x-1/2 z-[120] font-bold text-xs px-4 py-2 rounded-full transition-all duration-300 opacity-0 pointer-events-none" style="background:var(--pill-bg);color:var(--pill-fg);border:1.5px solid var(--border-ink);box-shadow:2px 2px 0 var(--cta-lip);">
         Saved to diary
     </div>
 
@@ -277,20 +371,20 @@
 
         <div class="flex flex-col items-center text-center space-y-5 my-auto anim-fade">
             <div class="relative flex items-center justify-center">
-                <div class="w-24 h-24 rounded-full border-2 border-transparent animate-spin" style="border-top-color:var(--accent-blue);border-right-color:rgba(59,130,246,0.28);"></div>
-                <div class="w-20 h-20 rounded-3xl flex items-center justify-center font-bold text-4xl shadow-2xl animate-pulse-logo absolute" style="background:var(--accent-blue);color:#ffffff;">
+                <div class="w-24 h-24 rounded-full animate-spin" style="border:1.5px dashed var(--border-ink);border-top-color:var(--accent-crimson);"></div>
+                <div class="w-20 h-20 rounded-3xl flex items-center justify-center font-bold text-4xl animate-pulse-logo absolute" style="background:var(--bg-card);color:var(--fg-primary);border:1.5px solid var(--border-ink);box-shadow:3px 3px 0 var(--cta-lip);">
                     C
                 </div>
             </div>
             <div class="space-y-1.5 pt-1">
-                <h1 class="font-bold text-3xl tracking-tight">Chrono</h1>
+                <h1 class="font-bold text-3xl tracking-tight">Chrono <span class="chrono-serif-italic font-bold" style="color:var(--accent-crimson);">Diary.</span></h1>
                 <p class="text-xs rev-muted max-w-xs leading-relaxed">Clean fever, medicine &amp; hydration diary synced across parents &amp; ready for your pediatrician.</p>
             </div>
         </div>
 
         <div class="w-full max-w-xs space-y-3 pb-4">
             <div class="w-full h-1.5 rounded-full overflow-hidden rev-sub">
-                <div id="splashProgressBar" class="h-full rounded-full transition-all duration-300" style="width:18%;background:var(--accent-blue);"></div>
+                <div id="splashProgressBar" class="h-full rounded-full transition-all duration-300" style="width:18%;background:var(--accent-crimson);"></div>
             </div>
             <div class="flex justify-between items-center text-xs rev-muted">
                 <span id="splashStatusText">Loading diary...</span>
@@ -303,12 +397,12 @@
     </div>
 
     <!-- ========================================================= -->
-    <!-- 2. REVOLUT AUTHENTICATION SCREEN                          -->
+    <!-- 2. AUTHENTICATION SCREEN                                  -->
     <!-- ========================================================= -->
-    <div id="onboardingAuthScreen" class="theme-dark fixed inset-0 z-[90] flex items-center justify-center p-5 hidden modal-backdrop">
-        <div class="rev-card rounded-[28px] max-w-xs w-full p-6 space-y-5 shadow-2xl anim-tab">
+    <div id="onboardingAuthScreen" class="theme-bone fixed inset-0 z-[90] flex items-center justify-center p-5 hidden modal-backdrop">
+        <div class="rev-card rounded-[24px] max-w-xs w-full p-6 space-y-5 shadow-2xl anim-tab">
             <div class="text-center space-y-2">
-                <div class="w-12 h-12 rounded-2xl font-bold text-2xl flex items-center justify-center mx-auto shadow-lg" style="background:var(--accent-blue);color:#ffffff;">
+                <div class="w-12 h-12 rounded-2xl font-bold text-2xl flex items-center justify-center mx-auto" style="background:var(--bg-hero);color:var(--fg-primary);border:1.5px solid var(--border-ink);box-shadow:2px 2px 0 var(--cta-lip);">
                     C
                 </div>
                 <h2 class="font-bold text-2xl tracking-tight">Chrono</h2>
@@ -316,7 +410,7 @@
             </div>
 
             <div class="grid grid-cols-2 p-1 rounded-full rev-sub text-xs font-bold">
-                <button type="button" id="obTabLogin" onclick="setObAuthMode('login')" class="py-2 rounded-full text-center" style="background:var(--accent-blue);color:#ffffff;">
+                <button type="button" id="obTabLogin" onclick="setObAuthMode('login')" class="py-2 rounded-full text-center" style="background:var(--chip-active-bg);color:var(--chip-active-fg);">
                     Sign In
                 </button>
                 <button type="button" id="obTabRegister" onclick="setObAuthMode('register')" class="py-2 rounded-full text-center rev-muted">
@@ -353,15 +447,15 @@
     </div>
 
     <!-- ========================================================= -->
-    <!-- 3. REVOLUT INITIAL CHILD SETUP                            -->
+    <!-- 3. INITIAL CHILD SETUP                                    -->
     <!-- ========================================================= -->
-    <div id="onboardingChildScreen" class="theme-dark fixed inset-0 z-[85] flex items-center justify-center p-5 hidden modal-backdrop overflow-y-auto">
-        <div class="rev-card rounded-[28px] max-w-sm w-full p-6 space-y-4 shadow-2xl anim-tab my-auto">
-            <div class="w-full h-1 rounded-full overflow-hidden rev-sub">
-                <div class="h-full w-2/3 rounded-full" style="background:var(--accent-blue);"></div>
+    <div id="onboardingChildScreen" class="theme-bone fixed inset-0 z-[85] flex items-center justify-center p-5 hidden modal-backdrop overflow-y-auto">
+        <div class="rev-card rounded-[24px] max-w-sm w-full p-6 space-y-4 shadow-2xl anim-tab my-auto">
+            <div class="w-full h-1.5 rounded-full overflow-hidden rev-sub">
+                <div class="h-full w-2/3 rounded-full" style="background:var(--accent-crimson);"></div>
             </div>
             <div class="space-y-1">
-                <div class="text-xs font-bold uppercase tracking-wider" style="color:var(--accent-blue-text);">Child Profile</div>
+                <div class="text-xs font-bold uppercase tracking-wider" style="color:var(--accent-crimson);">Child Profile</div>
                 <h2 class="font-bold text-2xl tracking-tight">Tell us about your child</h2>
                 <p class="text-xs rev-muted">Basic details for your diary and doctor report. You always choose medicines and doses yourself.</p>
             </div>
@@ -395,55 +489,55 @@
                         <input type="text" id="initChildDoctor" placeholder="+1..." class="rev-input w-full rounded-2xl px-3.5 py-2.5 text-xs font-medium">
                     </div>
                 </div>
-                <button type="submit" class="w-full rev-pill-primary font-bold py-3.5 rounded-full text-sm shadow-md mt-2">
+                <button type="submit" class="w-full rev-pill-primary font-bold py-3.5 rounded-full text-sm mt-2">
                     Save &amp; Open Home →
                 </button>
             </form>
 
-            <form onsubmit="handleInitJoinFamily(event)" class="pt-3 border-t border-white/10 space-y-2 text-xs">
+            <form onsubmit="handleInitJoinFamily(event)" class="pt-3 border-t rev-divider space-y-2 text-xs">
                 <label for="initJoinFamilyCode" class="block font-semibold rev-muted">Already have a partner's Family Code?</label>
                 <div class="flex gap-2">
                     <input type="text" id="initJoinFamilyCode" placeholder="FAM-7X9K" required class="rev-input flex-1 rounded-xl px-3.5 py-2.5 text-xs font-mono uppercase">
-                    <button type="submit" class="px-4 py-2.5 rounded-xl text-xs font-bold rev-sub shrink-0" style="color:var(--accent-blue-text);">Join</button>
+                    <button type="submit" class="px-4 py-2.5 rounded-xl text-xs font-bold rev-sub shrink-0" style="color:var(--accent-crimson);">Join</button>
                 </div>
             </form>
         </div>
     </div>
 
     <!-- ========================================================= -->
-    <!-- 4. MAIN REVOLUT APP SHELL                                 -->
+    <!-- 4. MAIN CHRONO APP SHELL (BONE PAPER & CRIMSON INK)       -->
     <!-- ========================================================= -->
-    <div id="appShell" class="mobile-shell theme-dark">
+    <div id="appShell" class="mobile-shell theme-bone">
 
         <!-- TOP HEADER: Home | Child Switcher Pill | SOS | Settings -->
-        <header class="rev-nav sticky top-0 z-30 border-b px-4 pt-3.5 pb-3 backdrop-blur-md no-print">
+        <header class="rev-nav sticky top-0 z-30 border-b-[1.5px] px-4 pt-3 pb-2.5 backdrop-blur-md no-print">
             <div class="flex items-center justify-between gap-2">
                 <button type="button" onclick="switchTab('home')" id="homeTopBtn" title="Home" class="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/></svg>
                 </button>
 
-                <button type="button" onclick="toggleChildrenDropdown()" id="childSelectorBtn" class="rev-card flex-1 h-9 rounded-full px-3.5 flex items-center justify-between text-xs font-semibold min-w-0">
+                <button type="button" onclick="toggleChildrenDropdown()" id="childSelectorBtn" class="rev-card flex-1 h-9 rounded-full px-3.5 flex items-center justify-between text-xs font-bold min-w-0">
                     <span id="headerChildSummary" class="truncate">My Child</span>
                     <span id="headerStatusText" class="text-xs font-bold shrink-0 ml-2" style="color:var(--accent-teal);">Ready ▾</span>
                 </button>
 
-                <button type="button" onclick="openSosModal()" id="sosTopBtn" title="Emergency SOS &amp; Red Flags" class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style="background:rgba(239,68,68,0.16);color:#ef4444;">
+                <button type="button" onclick="openSosModal()" id="sosTopBtn" title="Emergency SOS &amp; Red Flags" class="h-9 px-3 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0" style="background:var(--bg-card);color:var(--accent-crimson);border:1.5px solid var(--border-ink);box-shadow:2px 2px 0 var(--cta-lip);">
                     SOS
                 </button>
 
                 <button type="button" onclick="switchTab('settings')" id="gearTopBtn" title="Settings" class="w-9 h-9 rounded-full flex items-center justify-center shrink-0">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                 </button>
             </div>
 
             <!-- Child Switcher Dropdown -->
-            <div id="childrenDropdown" class="hidden mt-2 rev-card rounded-2xl p-2 space-y-1 shadow-2xl">
+            <div id="childrenDropdown" class="hidden mt-2 rev-card rounded-2xl p-2 space-y-1 shadow-xl">
                 <div id="childrenDropdownList" class="space-y-1 max-h-48 overflow-y-auto"></div>
-                <div class="pt-1.5 mt-1 border-t border-white/10 space-y-1">
+                <div class="pt-1.5 mt-1 border-t rev-divider space-y-1">
                     <button type="button" onclick="promptQuickRenameChild(); toggleChildrenDropdown(false);" class="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:opacity-80 rev-sub flex items-center gap-2">
                         <span>Rename / Edit Child</span>
                     </button>
-                    <button type="button" onclick="openChildModal(); toggleChildrenDropdown(false);" class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style="color:var(--accent-blue-text);">
+                    <button type="button" onclick="openChildModal(); toggleChildrenDropdown(false);" class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2" style="color:var(--accent-crimson);">
                         <span>+ Add Another Child</span>
                     </button>
                 </div>
@@ -454,77 +548,77 @@
         <main id="mainStage" class="flex-1 px-4 py-4 space-y-4 pb-24 overflow-y-auto">
 
             <!-- ===================================================== -->
-            <!-- TAB 1: HOME (CLEAN REVOLUT FIRST SCREEN)              -->
+            <!-- TAB 1: HOME (BONE PAPER & CRIMSON INK #124)           -->
             <!-- ===================================================== -->
-            <div id="tab-home" class="tab-content active space-y-4">
+            <div id="tab-home" class="tab-content active space-y-3.5">
 
-                <!-- 3h Fever Recheck Alarm Banner (only when active) -->
-                <div id="alarmBanner" class="hidden rev-card rounded-2xl p-3.5 space-y-2" style="border-color:var(--accent-blue);">
-                    <div class="flex items-center justify-between gap-2">
+                <!-- Keep alarmBanner DOM node synced silently; primary countdown lives in dashed ring -->
+                <div id="alarmBanner" class="hidden" aria-hidden="true">
+                    <span id="alarmCountdownText"></span>
+                </div>
+
+                <!-- Warm Paper Hero Band with Hairline Ink Rule & Dashed Countdown Ring -->
+                <div id="heroBoneStage" class="-mx-4 -mt-4 px-4 pt-4 pb-4 border-b-[1.5px]" style="background:var(--bg-hero);border-color:var(--border-ink);">
+                    <div class="flex items-center justify-between gap-3 mb-3.5">
                         <div class="min-w-0">
-                            <div class="text-xs font-bold" style="color:var(--accent-blue-text);">3h Fever Check Timer</div>
-                            <div id="alarmCountdownText" class="text-xs rev-muted tabular-nums">Next check soon</div>
+                            <div id="heroTimeLabel" class="text-xs font-bold uppercase tracking-wide rev-muted">Tap + Temp to log</div>
+                            <div id="heroTempValue" class="text-[44px] font-extrabold tracking-tight leading-none tabular-nums mt-1">--.-<span class="text-xl font-semibold ml-1 rev-muted">°C</span></div>
+                            <div class="mt-1 flex items-center gap-1.5">
+                                <span id="heroStatusDot" class="text-xs" style="color:var(--accent-crimson);">●</span>
+                                <span id="heroStatusLabel" class="chrono-serif-italic text-xl font-bold leading-tight" style="color:var(--accent-crimson);">Ready to log.</span>
+                            </div>
+                            <div id="heroPeakSub" class="text-xs rev-muted mt-1 font-medium">Peak —</div>
                         </div>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                            <button type="button" onclick="snoozeTempAlarm(30)" class="rev-sub px-2.5 py-1.5 rounded-full text-xs font-semibold">+30m</button>
-                            <button type="button" onclick="dismissTempAlarm()" class="rev-sub px-2.5 py-1.5 rounded-full text-xs font-bold" style="color:var(--accent-danger);">✕</button>
+
+                        <!-- Signature #124 Dashed Timer Circle -->
+                        <div id="heroTimerRing" onclick="if(!tempAlarmTarget){scheduleTempAlarm(3); showQuickToast('3h check timer started');}" class="w-[96px] h-[96px] rounded-full flex flex-col items-center justify-center text-center shrink-0 p-1.5 cursor-pointer" style="border:1.5px dashed var(--ring-ink);background:var(--bg-circle);">
+                            <span id="heroRingLabel" class="text-xs rev-muted font-medium">3h Check</span>
+                            <strong id="heroRingValue" class="text-sm font-extrabold tabular-nums leading-tight mt-0.5">Set 3h</strong>
+                            <div id="heroRingControls" class="hidden flex items-center gap-2 mt-0.5">
+                                <button type="button" onclick="event.stopPropagation(); snoozeTempAlarm(30)" class="text-xs font-extrabold" style="color:var(--accent-crimson);">+30m</button>
+                                <button type="button" onclick="event.stopPropagation(); dismissTempAlarm()" title="Dismiss timer" class="text-xs font-bold rev-muted hover:opacity-100">✕</button>
+                            </div>
                         </div>
+                    </div>
+
+                    <!-- Tactile Offset Action Strip (+ Temp | Give Med | Water) -->
+                    <div class="grid gap-2" style="grid-template-columns:1.25fr 1fr 1fr;">
+                        <button type="button" id="qCircle-temp" onclick="openSheet('temp')" class="rev-pill-primary rounded-full py-2.5 px-2 flex items-center justify-center gap-1.5 text-xs font-bold">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0Z"/></svg>
+                            <span>+ Temp</span>
+                        </button>
+                        <button type="button" id="qCircle-med" onclick="openSheet('med')" class="q-circle rounded-full py-2.5 px-2 flex items-center justify-center gap-1.5 text-xs font-semibold">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-35 12 12)"/><line x1="10" y1="10" x2="14" y2="14"/></svg>
+                            <span>Give Med</span>
+                        </button>
+                        <button type="button" id="qCircle-fluids" onclick="openSheet('fluids')" class="q-circle rounded-full py-2.5 px-2 flex items-center justify-center gap-1.5 text-xs font-semibold">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 2.5C12 2.5 6 10 6 14.5a6 6 0 0 0 12 0C18 10 12 2.5 12 2.5Z"/></svg>
+                            <span>Water</span>
+                        </button>
                     </div>
                 </div>
 
-                <!-- Hero Temperature Readout -->
-                <div class="text-center pt-2 pb-1 space-y-2">
-                    <div id="heroTimeLabel" class="text-xs font-medium rev-muted">Tap Temp below to log first reading</div>
-                    <div id="heroTempValue" class="text-4xl font-bold tracking-tight tabular-nums">--.-<span class="text-xl font-semibold ml-1 rev-muted">°C</span></div>
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold rev-card">
-                        <span id="heroStatusDot" style="color:var(--accent-teal);">●</span>
-                        <span id="heroStatusLabel">Ready to log</span>
-                    </div>
-                </div>
-
-                <!-- Revolut 3 Circular Quick-Action Buttons (Temp | Give Med | Water) -->
-                <div class="grid grid-cols-3 gap-3 px-4 text-center py-1">
-                    <button type="button" onclick="openSheet('temp')" class="flex flex-col items-center gap-1.5 group">
-                        <span id="qCircle-temp" class="q-circle w-12 h-12 rounded-full flex items-center justify-center group-hover:scale-105">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0Z"/></svg>
-                        </span>
-                        <span class="text-xs font-semibold">Temp</span>
-                    </button>
-                    <button type="button" onclick="openSheet('med')" class="flex flex-col items-center gap-1.5 group">
-                        <span id="qCircle-med" class="q-circle w-12 h-12 rounded-full flex items-center justify-center group-hover:scale-105">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-35 12 12)"/><line x1="10" y1="10" x2="14" y2="14"/></svg>
-                        </span>
-                        <span class="text-xs font-semibold">Give Med</span>
-                    </button>
-                    <button type="button" onclick="openSheet('fluids')" class="flex flex-col items-center gap-1.5 group">
-                        <span id="qCircle-fluids" class="q-circle w-12 h-12 rounded-full flex items-center justify-center group-hover:scale-105">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2.5C12 2.5 6 10 6 14.5a6 6 0 0 0 12 0C18 10 12 2.5 12 2.5Z"/></svg>
-                        </span>
-                        <span class="text-xs font-semibold">Water</span>
-                    </button>
-                </div>
-
-                <!-- 2 Clean Pockets: Last Medicine & Drank Today -->
+                <!-- 2 Clean Pockets: Last Med & Fluids -->
                 <div class="grid grid-cols-2 gap-2.5">
-                    <div onclick="openSheet('med')" class="cursor-pointer rev-card rounded-2xl p-3.5 space-y-1.5 hover:opacity-95">
-                        <div class="text-xs font-semibold rev-muted">Last Medicine</div>
-                        <div id="pocketLastMed" class="text-sm font-bold leading-snug truncate" style="color:var(--accent-blue-text);">None yet</div>
+                    <div onclick="openSheet('med')" class="cursor-pointer rev-card rounded-2xl p-3.5 space-y-1 hover:opacity-95">
+                        <div class="text-xs font-semibold rev-muted">Last Med</div>
+                        <div id="pocketLastMed" class="text-sm font-bold leading-snug truncate">None yet</div>
                         <div id="pocketLastMedSub" class="text-xs font-medium rev-muted truncate">Tap to log</div>
                     </div>
-                    <div onclick="openSheet('fluids')" class="cursor-pointer rev-card rounded-2xl p-3.5 space-y-1.5 hover:opacity-95">
-                        <div class="text-xs font-semibold rev-muted">Drank Today</div>
+                    <div onclick="openSheet('fluids')" class="cursor-pointer rev-card rounded-2xl p-3.5 space-y-1 hover:opacity-95">
+                        <div class="text-xs font-semibold rev-muted">Fluids</div>
                         <div id="pocketHydration" class="text-sm font-bold leading-snug tabular-nums" style="color:var(--accent-teal);">0 / 1200 ml</div>
                         <div id="pocketUrineSub" class="text-xs font-medium rev-muted truncate">0 bathroom checks</div>
                     </div>
                 </div>
 
-                <!-- Clean Today's Activity Feed -->
-                <div class="rev-card rounded-2xl p-4 space-y-3">
-                    <div class="flex items-center justify-between text-xs">
+                <!-- Clean Today's Activity Ledger -->
+                <div class="rev-card rounded-2xl p-4 space-y-2.5">
+                    <div class="flex items-center justify-between text-xs pb-1 border-b rev-divider">
                         <span class="font-bold">Today's Activity <span id="entriesCount" class="font-normal rev-muted ml-1">(0)</span></span>
-                        <button type="button" onclick="switchTab('chart')" class="font-semibold hover:opacity-80" style="color:var(--accent-blue-text);">View curve →</button>
+                        <button type="button" onclick="switchTab('chart')" class="font-bold hover:opacity-80" style="color:var(--accent-crimson);">View curve →</button>
                     </div>
-                    <div id="diaryEntriesList" class="space-y-3"></div>
+                    <div id="diaryEntriesList" class="divide-y rev-divider"></div>
                 </div>
             </div>
 
@@ -648,7 +742,7 @@
                     </p>
                     <div id="familyMembersList" class="space-y-2"></div>
 
-                    <form onsubmit="handleJoinFamily(event)" class="pt-2 border-t border-white/10 space-y-2 text-xs">
+                    <form onsubmit="handleJoinFamily(event)" class="pt-2 border-t rev-divider space-y-2 text-xs">
                         <label for="inputJoinFamilyCode" class="block font-semibold rev-muted">Join another parent's profile:</label>
                         <div class="flex gap-2">
                             <input type="text" id="inputJoinFamilyCode" placeholder="FAM-7X9K" required class="rev-input flex-1 rounded-xl px-3.5 py-2.5 text-xs font-mono uppercase">
@@ -753,6 +847,10 @@
                 <div class="rev-card rounded-2xl p-4 space-y-3">
                     <div class="text-xs font-bold uppercase tracking-wide rev-muted">Colors</div>
                     <div class="grid grid-cols-2 gap-2 text-xs font-bold">
+                        <button type="button" id="themeBtn-bone" onclick="setTheme('bone')" class="col-span-2 py-2.5 px-3 rounded-xl chip-btn flex items-center justify-center gap-2">
+                            <span class="w-3.5 h-3.5 rounded-full border shrink-0" style="background:#FAF8F3;border-color:#A83328;"></span>
+                            <span>Bone Paper &amp; Crimson Ink</span>
+                        </button>
                         <button type="button" id="themeBtn-dark" onclick="setTheme('dark')" class="py-2.5 px-3 rounded-xl chip-btn flex items-center justify-center gap-2">
                             <span class="w-3.5 h-3.5 rounded-full border shrink-0" style="background:#0f1115;border-color:#3b82f6;"></span>
                             <span>Black</span>
@@ -803,7 +901,7 @@
                         <span id="doseRefChevron" class="font-bold shrink-0 ml-2" style="color:var(--accent-blue-text);">Open ▾</span>
                     </button>
 
-                    <div id="doseRefAccordionBody" class="hidden pt-2 border-t border-white/10 space-y-3">
+                    <div id="doseRefAccordionBody" class="hidden pt-2 border-t rev-divider space-y-3">
                         <div class="rev-sub rounded-xl p-3 space-y-2">
                             <div class="flex items-center justify-between">
                                 <button type="button" onclick="adjustQuickWeight(-0.5)" class="w-9 h-9 rounded-full rev-card font-bold text-base">−</button>
@@ -813,7 +911,7 @@
                                 </div>
                                 <button type="button" onclick="adjustQuickWeight(0.5)" class="w-9 h-9 rounded-full rev-card font-bold text-base">+</button>
                             </div>
-                            <input type="range" id="calcWeightSlider" min="4" max="50" step="0.5" value="16" oninput="onCalcWeightSlider(this.value)" class="w-full accent-blue-500 cursor-pointer h-1.5">
+                            <input type="range" id="calcWeightSlider" min="4" max="50" step="0.5" value="16" oninput="onCalcWeightSlider(this.value)" class="w-full cursor-pointer h-1.5" style="accent-color: var(--chip-active-bg);">
                         </div>
 
                         <div class="grid grid-cols-2 gap-2">
@@ -847,11 +945,11 @@
                         </div>
                         <button type="button" onclick="openAuthModal()" id="settingsAuthActionBtn" class="px-3.5 py-1.5 rounded-full font-bold rev-sub">Sign In</button>
                     </div>
-                    <div id="pwaInstallRow" class="hidden flex items-center justify-between py-2 border-t border-white/10">
+                    <div id="pwaInstallRow" class="hidden flex items-center justify-between py-2 border-t rev-divider">
                         <span class="font-semibold">Install Offline App (PWA)</span>
                         <button type="button" onclick="triggerPwaInstall()" class="font-bold" style="color:var(--accent-blue-text);">Install →</button>
                     </div>
-                    <div class="flex items-center justify-between py-2 border-t border-white/10">
+                    <div class="flex items-center justify-between py-2 border-t rev-divider">
                         <span class="font-semibold">Reset Local Diary Data</span>
                         <button type="button" onclick="wipeAllData()" class="font-bold" style="color:var(--accent-danger);">Clear All Data</button>
                     </div>
@@ -860,7 +958,7 @@
         </main>
 
         <!-- CLEAN 5-TAB BOTTOM NAVIGATION BAR -->
-        <nav class="rev-nav border-t fixed bottom-0 left-0 right-0 z-30 backdrop-blur-md no-print">
+        <nav class="rev-nav border-t-[1.5px] fixed bottom-0 left-0 right-0 z-30 backdrop-blur-md no-print">
             <div class="max-w-[460px] mx-auto px-2 py-2 grid grid-cols-5 gap-1 text-center">
                 <button type="button" onclick="switchTab('home')" id="nav-home" class="py-1 rounded-xl flex flex-col items-center gap-0.5 text-xs font-bold">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/></svg>
@@ -894,8 +992,8 @@
 
         <!-- MODAL: ALARM (TIME TO CHECK TEMPERATURE) -->
         <div id="alarmPopupModal" class="fixed inset-0 modal-backdrop z-50 hidden flex items-center justify-center p-4">
-            <div class="rev-card rounded-[28px] max-w-sm w-full p-6 space-y-4 shadow-2xl text-center anim-tab" style="border:2px solid var(--accent-blue);">
-                <div class="w-14 h-14 rounded-full flex items-center justify-center text-2xl mx-auto" style="background:rgba(59,130,246,0.18);color:var(--accent-blue-text);">🔔</div>
+            <div class="rev-card rounded-[28px] max-w-sm w-full p-6 space-y-4 shadow-2xl text-center anim-tab" style="border:1.5px solid var(--ring-ink);">
+                <div class="w-14 h-14 rounded-full flex items-center justify-center text-2xl mx-auto" style="background:var(--bg-hero);border:1.5px dashed var(--ring-ink);color:var(--accent-blue-text);">🔔</div>
                 <div class="space-y-1">
                     <h3 class="font-bold text-xl">Time to check temperature</h3>
                     <p class="text-xs rev-muted leading-relaxed">
@@ -1051,7 +1149,7 @@
         let authToken = localStorage.getItem('ps_token') || null;
         let children = JSON.parse(localStorage.getItem('ps_children') || 'null') || [];
         let currentChildIdx = 0;
-        let currentTheme = localStorage.getItem('ps_theme') || 'dark';
+        let currentTheme = localStorage.getItem('ps_theme') || 'bone';
         let tempAlarmTarget = parseInt(localStorage.getItem('ps_alarm_target') || '0', 10);
         let tempUnit = localStorage.getItem('ps_temp_unit') || 'C';
         let weightUnit = localStorage.getItem('ps_weight_unit') || 'kg';
@@ -1271,9 +1369,17 @@
         function checkAlarmTick() {
             const banner = document.getElementById('alarmBanner');
             const cText = document.getElementById('alarmCountdownText');
-            if (!banner) return;
+            const ringLabel = document.getElementById('heroRingLabel');
+            const ringVal = document.getElementById('heroRingValue');
+            const ringCtrls = document.getElementById('heroRingControls');
+            if (banner) banner.classList.add('hidden');
             if (!tempAlarmTarget) {
-                banner.classList.add('hidden');
+                if (ringLabel) ringLabel.innerText = '3h Check';
+                if (ringVal) ringVal.innerText = 'Set 3h';
+                if (ringCtrls) {
+                    ringCtrls.classList.add('hidden');
+                    ringCtrls.classList.remove('flex');
+                }
                 return;
             }
             const diffMs = tempAlarmTarget - Date.now();
@@ -1289,15 +1395,25 @@
                 }
                 tempAlarmTarget = 0;
                 localStorage.removeItem('ps_alarm_target');
-                banner.classList.add('hidden');
+                if (ringLabel) ringLabel.innerText = '3h Check';
+                if (ringVal) ringVal.innerText = 'Set 3h';
+                if (ringCtrls) {
+                    ringCtrls.classList.add('hidden');
+                    ringCtrls.classList.remove('flex');
+                }
                 return;
             }
             const totalSec = Math.floor(diffMs / 1000);
             const hrs = Math.floor(totalSec / 3600);
             const mins = Math.floor((totalSec % 3600) / 60);
-            banner.classList.remove('hidden');
             const targetTimeStr = new Date(tempAlarmTarget).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             if (cText) cText.innerText = `Next check in ${hrs}h ${mins < 10 ? '0' + mins : mins}m (at ${targetTimeStr})`;
+            if (ringLabel) ringLabel.innerText = 'Timer';
+            if (ringVal) ringVal.innerText = hrs > 0 ? `${hrs}h ${mins < 10 ? '0' + mins : mins}m` : (mins > 0 ? `${mins}m` : `${totalSec}s`);
+            if (ringCtrls) {
+                ringCtrls.classList.remove('hidden');
+                ringCtrls.classList.add('flex');
+            }
         }
 
         // ==========================================
@@ -1381,9 +1497,9 @@
             const isLogin = mode === 'login';
             const lBtn = document.getElementById('obTabLogin');
             const rBtn = document.getElementById('obTabRegister');
-            lBtn.style.cssText = isLogin ? 'background:var(--accent-blue);color:#ffffff;' : '';
+            lBtn.style.cssText = isLogin ? 'background:var(--chip-active-bg);color:var(--chip-active-fg);' : '';
             lBtn.className = `py-2 rounded-full text-center ${isLogin ? '' : 'rev-muted'}`;
-            rBtn.style.cssText = !isLogin ? 'background:var(--accent-blue);color:#ffffff;' : '';
+            rBtn.style.cssText = !isLogin ? 'background:var(--chip-active-bg);color:var(--chip-active-fg);' : '';
             rBtn.className = `py-2 rounded-full text-center ${!isLogin ? '' : 'rev-muted'}`;
             document.getElementById('obLoginForm').classList.toggle('hidden', !isLogin);
             document.getElementById('obRegisterForm').classList.toggle('hidden', isLogin);
@@ -1843,12 +1959,14 @@
             const homeBtn = document.getElementById('homeTopBtn');
             const gearBtn = document.getElementById('gearTopBtn');
             if (homeBtn) {
-                homeBtn.style.backgroundColor = activeTab === 'home' ? 'var(--accent-blue)' : 'var(--bg-sub)';
-                homeBtn.style.color = activeTab === 'home' ? '#ffffff' : 'var(--fg-primary)';
+                homeBtn.style.backgroundColor = activeTab === 'home' ? 'var(--pill-bg)' : 'var(--bg-card)';
+                homeBtn.style.color = activeTab === 'home' ? 'var(--pill-fg)' : 'var(--fg-primary)';
+                homeBtn.style.border = activeTab === 'home' ? '1.5px solid var(--pill-bg)' : '1.5px solid var(--border-ink)';
             }
             if (gearBtn) {
-                gearBtn.style.backgroundColor = activeTab === 'settings' ? 'var(--accent-blue)' : 'var(--bg-sub)';
-                gearBtn.style.color = activeTab === 'settings' ? '#ffffff' : 'var(--fg-primary)';
+                gearBtn.style.backgroundColor = activeTab === 'settings' ? 'var(--pill-bg)' : 'var(--bg-card)';
+                gearBtn.style.color = activeTab === 'settings' ? 'var(--pill-fg)' : 'var(--fg-primary)';
+                gearBtn.style.border = activeTab === 'settings' ? '1.5px solid var(--pill-bg)' : '1.5px solid var(--border-ink)';
             }
         }
 
@@ -1993,7 +2111,7 @@
                             </div>
                             <button type="button" onclick="stepSheetTemp(0.1)" class="w-11 h-11 rounded-full rev-card text-xl font-bold flex items-center justify-center">+</button>
                         </div>
-                        <input id="sheetTempSlider" type="range" min="35.5" max="41.5" step="0.1" value="${sheetTempValC.toFixed(1)}" oninput="onSheetTempSlide(this.value)" class="w-full accent-blue-500 cursor-pointer h-1.5">
+                        <input id="sheetTempSlider" type="range" min="35.5" max="41.5" step="0.1" value="${sheetTempValC.toFixed(1)}" oninput="onSheetTempSlide(this.value)" class="w-full cursor-pointer h-1.5" style="accent-color: var(--chip-active-bg);">
                     </div>
 
                     <div class="space-y-2">
@@ -2069,7 +2187,7 @@
 
                         <label class="flex items-center justify-between text-xs pt-0.5 cursor-pointer">
                             <span class="rev-muted">Save to Usual Meds for 1-tap next time</span>
-                            <input type="checkbox" id="chkSaveFavMed" ${saveToFavorites ? 'checked' : ''} onchange="saveToFavorites = this.checked" class="w-4 h-4 accent-blue-500 rounded cursor-pointer">
+                            <input type="checkbox" id="chkSaveFavMed" ${saveToFavorites ? 'checked' : ''} onchange="saveToFavorites = this.checked" class="w-4 h-4 rounded cursor-pointer" style="accent-color: var(--chip-active-bg);">
                         </label>
                     </div>
 
@@ -2432,19 +2550,23 @@
             const heroTimeEl = document.getElementById('heroTimeLabel');
             const heroDot = document.getElementById('heroStatusDot');
             const heroLabel = document.getElementById('heroStatusLabel');
+            const heroPeakEl = document.getElementById('heroPeakSub');
 
             if (latestTempC !== null) {
                 const shown = tempUnit === 'F' ? cToF(latestTempC).toFixed(1) : latestTempC.toFixed(1);
-                heroTempEl.innerHTML = `${shown}<span class="text-xl font-semibold ml-1 rev-muted">°${tempUnit}</span>`;
-                heroTimeEl.innerText = `Latest reading · ${formatTimeAgo(latest)}`;
-                heroDot.style.color = highFever ? 'var(--accent-danger)' : fevering ? 'var(--accent-warn)' : 'var(--accent-teal)';
-                const sevText = highFever ? 'High Fever' : fevering ? 'Mild Fever' : 'Normal';
-                heroLabel.innerText = peak ? `${sevText} · Peak 48h ${formatTemp(peak)}` : sevText;
+                heroTempEl.innerHTML = `${shown}<span class="text-xl font-semibold ml-0.5 rev-muted">°${tempUnit}</span>`;
+                heroTimeEl.innerText = `Latest · ${formatTimeAgo(latest)}`;
+                heroDot.style.color = highFever ? 'var(--accent-danger)' : fevering ? 'var(--accent-crimson, var(--accent-warn))' : 'var(--accent-teal)';
+                heroLabel.style.color = highFever ? 'var(--accent-danger)' : fevering ? 'var(--accent-crimson, var(--accent-warn))' : 'var(--accent-teal)';
+                heroLabel.innerText = highFever ? 'High Fever.' : fevering ? 'Mild Fever.' : 'Normal.';
+                if (heroPeakEl) heroPeakEl.innerText = peak ? `Peak ${formatTemp(peak)}` : (child.episode || '48h diary');
             } else {
-                heroTempEl.innerHTML = `--.-<span class="text-xl font-semibold ml-1 rev-muted">°${tempUnit}</span>`;
-                heroTimeEl.innerText = 'Tap Temp below to log first reading';
-                heroDot.style.color = 'var(--accent-teal)';
-                heroLabel.innerText = child.episode || 'Observation ready';
+                heroTempEl.innerHTML = `--.-<span class="text-xl font-semibold ml-0.5 rev-muted">°${tempUnit}</span>`;
+                heroTimeEl.innerText = 'Tap + Temp to log';
+                heroDot.style.color = 'var(--accent-crimson, var(--accent-teal))';
+                heroLabel.style.color = 'var(--accent-crimson, var(--accent-blue-text))';
+                heroLabel.innerText = child.episode ? `${child.episode}.` : 'Ready to log.';
+                if (heroPeakEl) heroPeakEl.innerText = '48h observation ready';
             }
 
             // Pocket 1: Last Medicine (including live countdown note if ibu/para given)
@@ -2482,31 +2604,36 @@
             const entriesList = document.getElementById('diaryEntriesList');
             document.getElementById('entriesCount').innerText = `(${child.points48h.length})`;
             if (child.points48h.length === 0) {
-                entriesList.innerHTML = `<div class="text-center py-5 text-xs rev-muted">No entries yet. Use Temp, Give Med, or Water above.</div>`;
+                entriesList.innerHTML = `<div class="text-center py-5 text-xs rev-muted">No entries yet. Use + Temp, Give Med, or Water above.</div>`;
             } else {
                 entriesList.innerHTML = [...child.points48h].reverse().map((p, revIdx) => {
                     const realIdx = child.points48h.length - 1 - revIdx;
                     const isMed = !!p.med;
                     const isDrink = !p.med && !!p.drink;
                     const iconSvg = isMed
-                        ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-35 12 12)"/><line x1="10" y1="10" x2="14" y2="14"/></svg>`
+                        ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-35 12 12)"/><line x1="10" y1="10" x2="14" y2="14"/></svg>`
                         : isDrink
-                            ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2.5C12 2.5 6 10 6 14.5a6 6 0 0 0 12 0C18 10 12 2.5 12 2.5Z"/></svg>`
-                            : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0Z"/></svg>`;
+                            ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 2.5C12 2.5 6 10 6 14.5a6 6 0 0 0 12 0C18 10 12 2.5 12 2.5Z"/></svg>`
+                            : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0Z"/></svg>`;
                     const title = isMed ? escHtml(p.med) : isDrink ? escHtml(p.drink) : 'Temperature Check';
                     const rightVal = isMed ? 'Med' : isDrink ? `+${parseFluidMl(p.drink)} ml` : formatTemp(p.temp);
+                    const rightStyle = isDrink
+                        ? 'color:var(--accent-teal);'
+                        : isMed
+                            ? 'color:var(--accent-crimson, var(--fg-primary));'
+                            : (p.temp >= 37.8 ? 'color:var(--accent-danger);' : '');
                     const subMeta = [formatTimeAgo(p), p.author ? `by ${p.author}` : '', p.note].filter(Boolean).join(' · ');
                     return `
-                        <div class="flex items-center justify-between gap-2.5 text-xs">
+                        <div class="py-2.5 flex items-center justify-between gap-2.5 text-xs">
                             <div class="flex items-center gap-2.5 min-w-0">
-                                <span class="w-9 h-9 rounded-full flex items-center justify-center shrink-0 rev-sub">${iconSvg}</span>
+                                <span class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 rev-sub">${iconSvg}</span>
                                 <div class="min-w-0">
                                     <div class="font-bold truncate">${title}</div>
                                     <div class="rev-muted truncate">${escHtml(subMeta)}</div>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 shrink-0">
-                                <span class="font-bold tabular-nums">${escHtml(rightVal)}</span>
+                                <span class="font-bold tabular-nums" style="${rightStyle}">${escHtml(rightVal)}</span>
                                 <button type="button" onclick="deleteDiaryPoint(${realIdx})" title="Delete entry" class="rev-muted hover:opacity-100 px-1 text-xs">✕</button>
                             </div>
                         </div>
@@ -2690,8 +2817,8 @@
             ['12h', '24h', '48h'].forEach(r => {
                 const b = document.getElementById(`rangeBtn-${r}`);
                 if (!b) return;
-                b.style.background = chartRange === r ? 'var(--accent-blue)' : 'transparent';
-                b.style.color = chartRange === r ? '#ffffff' : 'var(--fg-muted)';
+                b.style.background = chartRange === r ? 'var(--chip-active-bg)' : 'transparent';
+                b.style.color = chartRange === r ? 'var(--chip-active-fg)' : 'var(--fg-muted)';
             });
 
             const wrap = document.getElementById('svgChartWrap');
@@ -2711,7 +2838,7 @@
             document.getElementById('chartCountVal').innerText = rawPts.length;
 
             if (rawPts.length === 0) {
-                wrap.innerHTML = `<div class="h-32 flex items-center justify-center text-xs rev-muted text-center">No readings in the last ${chartRange}. Tap Temp on Home to log.</div>`;
+                wrap.innerHTML = `<div class="h-32 flex items-center justify-center text-xs rev-muted text-center">No readings in the last ${chartRange}. Tap + Temp on Home to log.</div>`;
                 if (infoBox) infoBox.innerHTML = `<span class="rev-muted">No readings in selected window</span><span>—</span>`;
                 return;
             }
@@ -2741,19 +2868,19 @@
                 <svg viewBox="0 0 320 118" class="w-full h-36 select-none overflow-visible">
                     <defs>
                         <linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.28"/>
-                            <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+                            <stop offset="0%" stop-color="var(--chart-line)" stop-opacity="0.22"/>
+                            <stop offset="100%" stop-color="var(--chart-line)" stop-opacity="0"/>
                         </linearGradient>
                     </defs>
-                    <line x1="16" y1="${yFever}" x2="276" y2="${yFever}" stroke="var(--accent-warn)" stroke-width="1" stroke-dasharray="4 4" stroke-opacity="0.65"/>
-                    <text x="282" y="22" font-size="10" fill="var(--fg-muted)">${highLbl}</text>
-                    <text x="282" y="${yFever + 3}" font-size="10" font-weight="700" fill="var(--accent-warn)">${midLbl}</text>
-                    <text x="282" y="88" font-size="10" fill="var(--fg-muted)">${lowLbl}</text>
+                    <line x1="16" y1="${yFever}" x2="276" y2="${yFever}" stroke="var(--accent-warn)" stroke-width="1" stroke-dasharray="4 4" stroke-opacity="0.7"/>
+                    <text x="282" y="22" font-size="12" fill="var(--fg-muted)">${highLbl}</text>
+                    <text x="282" y="${yFever + 4}" font-size="12" font-weight="700" fill="var(--accent-warn)">${midLbl}</text>
+                    <text x="282" y="88" font-size="12" fill="var(--fg-muted)">${lowLbl}</text>
                     ${areaD ? `<path d="${areaD}" fill="url(#tempFill)"/>` : ''}
-                    ${svgPts.length > 1 ? `<path d="${smoothD}" fill="none" stroke="#60a5fa" stroke-width="3" stroke-linecap="round"/>` : ''}
+                    ${svgPts.length > 1 ? `<path d="${smoothD}" fill="none" stroke="var(--chart-line)" stroke-width="2.75" stroke-linecap="round"/>` : ''}
                     ${svgPts.map(pt => {
                         const sel = pt.idx === selectedChartIdx;
-                        const fill = pt.temp >= 39.0 ? '#ef4444' : pt.temp >= 37.8 ? '#fbbf24' : '#2dd4bf';
+                        const fill = pt.temp >= 39.0 ? 'var(--accent-danger)' : pt.temp >= 37.8 ? 'var(--accent-warn)' : 'var(--accent-teal)';
                         return `
                             <g style="cursor:pointer;" onclick="selectChartPoint(${pt.idx})">
                                 <circle cx="${pt.x}" cy="${pt.y}" r="14" fill="transparent"/>
@@ -2763,9 +2890,9 @@
                             </g>
                         `;
                     }).join('')}
-                    <text x="16" y="113" font-size="10" fill="var(--fg-muted)">-${chartRange}</text>
-                    <text x="138" y="113" font-size="10" fill="var(--fg-muted)">-${Math.round(rangeHrs / 2)}h</text>
-                    <text x="255" y="113" font-size="10" fill="var(--fg-muted)">Now</text>
+                    <text x="16" y="114" font-size="12" fill="var(--fg-muted)">-${chartRange}</text>
+                    <text x="136" y="114" font-size="12" fill="var(--fg-muted)">-${Math.round(rangeHrs / 2)}h</text>
+                    <text x="252" y="114" font-size="12" fill="var(--fg-muted)">Now</text>
                 </svg>
             `;
 
@@ -2970,7 +3097,7 @@
             listEl.innerHTML = rems.map(r => `
                 <div class="rev-sub rounded-xl px-3 py-2 flex items-center justify-between text-xs ${r.done ? 'opacity-60' : ''}">
                     <label class="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0">
-                        <input type="checkbox" ${r.done ? 'checked' : ''} onchange="toggleReminderItem('${r.id}')" class="w-4 h-4 accent-blue-500 rounded cursor-pointer">
+                        <input type="checkbox" ${r.done ? 'checked' : ''} onchange="toggleReminderItem('${r.id}')" class="w-4 h-4 rounded cursor-pointer" style="accent-color: var(--chip-active-bg);">
                         <span class="truncate font-semibold ${r.done ? 'line-through rev-muted' : ''}">${escHtml(r.title)} <span class="rev-muted font-normal">· ${escHtml(r.time || 'Scheduled')}</span></span>
                     </label>
                     <button type="button" onclick="deleteReminderItem('${r.id}')" class="rev-muted hover:opacity-100 px-1.5">✕</button>
@@ -3253,23 +3380,23 @@
         }
 
         function setTheme(themeName, persist = true) {
-            const valid = ['dark', 'light', 'mint', 'warm'].includes(themeName) ? themeName : 'dark';
+            const valid = ['bone', 'dark', 'light', 'mint', 'warm'].includes(themeName) ? themeName : 'bone';
             currentTheme = valid;
             document.body.className = `theme-${valid} antialiased h-full m-0 p-0`;
             ['splashScreen', 'appShell', 'onboardingAuthScreen', 'onboardingChildScreen'].forEach(id => {
                 const el = document.getElementById(id);
                 if (!el) return;
-                el.classList.remove('theme-dark', 'theme-light', 'theme-mint', 'theme-warm');
+                el.classList.remove('theme-bone', 'theme-dark', 'theme-light', 'theme-mint', 'theme-warm');
                 el.classList.add(`theme-${valid}`);
             });
 
             const meta = document.getElementById('metaThemeColor');
-            const metaColors = { dark: '#0f1115', light: '#f4f5f7', mint: '#06241f', warm: '#1c1917' };
-            if (meta) meta.setAttribute('content', metaColors[valid] || '#0f1115');
+            const metaColors = { bone: '#FAF8F3', dark: '#0f1115', light: '#f4f5f7', mint: '#06241f', warm: '#1c1917' };
+            if (meta) meta.setAttribute('content', metaColors[valid] || '#FAF8F3');
 
-            ['dark', 'light', 'mint', 'warm'].forEach(m => {
+            ['bone', 'dark', 'light', 'mint', 'warm'].forEach(m => {
                 const b = document.getElementById(`themeBtn-${m}`);
-                if (b) b.className = `py-2.5 px-3 rounded-xl chip-btn flex items-center justify-center gap-2 ${valid === m ? 'chip-selected' : ''}`;
+                if (b) b.className = `${m === 'bone' ? 'col-span-2 ' : ''}py-2.5 px-3 rounded-xl chip-btn flex items-center justify-center gap-2 ${valid === m ? 'chip-selected' : ''}`;
             });
 
             if (persist) {
@@ -3367,26 +3494,26 @@
             canvas.width = W; canvas.height = H;
             const ctx = canvas.getContext('2d');
 
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
-            ctx.fillStyle = '#0f1115'; ctx.fillRect(0, 0, W, 140);
-            ctx.fillStyle = '#60a5fa'; ctx.font = 'bold 34px "Inter", sans-serif';
+            ctx.fillStyle = '#FAF8F3'; ctx.fillRect(0, 0, W, H);
+            ctx.fillStyle = '#1C1B19'; ctx.fillRect(0, 0, W, 140);
+            ctx.fillStyle = '#FAF8F3'; ctx.font = 'bold 34px "Inter", sans-serif';
             ctx.fillText('Chrono — Clinical Report for Pediatrician', 50, 58);
-            ctx.fillStyle = '#94a3b8'; ctx.font = '20px "Inter", sans-serif';
+            ctx.fillStyle = '#D4CFC2'; ctx.font = '20px "Inter", sans-serif';
             ctx.fillText('48-Hour Observation Diary for Physician Review · Not for Self-Treatment', 50, 98);
 
-            ctx.fillStyle = '#cbd5e1'; ctx.font = 'bold 18px "Inter", sans-serif';
+            ctx.fillStyle = '#EAE6DC'; ctx.font = 'bold 18px "Inter", sans-serif';
             ctx.textAlign = 'right';
             const nowStr = new Date().toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
             ctx.fillText(`Generated: ${nowStr}`, W - 50, 75);
             ctx.textAlign = 'left';
 
             const cardY = 165;
-            ctx.fillStyle = '#f8fafc'; ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2;
+            ctx.fillStyle = '#F3EFE4'; ctx.strokeStyle = '#1C1B19'; ctx.lineWidth = 2;
             drawRoundedRect(ctx, 50, cardY, W - 100, 190, 16); ctx.fill(); ctx.stroke();
 
-            ctx.fillStyle = '#0f172a'; ctx.font = 'bold 28px "Inter", sans-serif';
+            ctx.fillStyle = '#1C1B19'; ctx.font = 'bold 28px "Inter", sans-serif';
             ctx.fillText(`Patient: ${child.name}, ${child.age} yr, ${child.weight} kg`, 80, cardY + 50);
-            ctx.fillStyle = '#2563eb'; ctx.font = 'bold 20px "Inter", sans-serif';
+            ctx.fillStyle = '#A83328'; ctx.font = 'bold 20px "Inter", sans-serif';
             ctx.fillText(`Family Code: ${child.familyCode || 'FAM-7942'}`, W - 460, cardY + 50);
 
             ctx.fillStyle = '#334155'; ctx.font = '20px "Inter", sans-serif';

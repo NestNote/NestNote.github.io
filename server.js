@@ -8,6 +8,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'chrono_data.json');
@@ -505,20 +506,40 @@ const server = http.createServer(async (req, res) => {
         }
     }
 
+    function sendStaticFile(filePath, contentType) {
+        const raw = fs.readFileSync(filePath);
+        const acceptEnc = String(req.headers['accept-encoding'] || '');
+        if (acceptEnc.includes('gzip')) {
+            const gz = zlib.gzipSync(raw);
+            res.writeHead(200, {
+                'Content-Type': contentType,
+                'Content-Encoding': 'gzip',
+                'Content-Length': gz.length,
+                'Vary': 'Accept-Encoding',
+                'Cache-Control': 'no-cache'
+            });
+            return res.end(gz);
+        }
+        res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': raw.length,
+            'Cache-Control': 'no-cache'
+        });
+        return res.end(raw);
+    }
+
     // ---------------- STATIC SERVING (PWA + HTML) ----------------
     if (pathname === '/manifest.json') {
         const manifestPath = path.join(__dirname, 'static', 'manifest.json');
         if (fs.existsSync(manifestPath)) {
-            res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8' });
-            return fs.createReadStream(manifestPath).pipe(res);
+            return sendStaticFile(manifestPath, 'application/manifest+json; charset=utf-8');
         }
     }
 
     if (pathname === '/sw.js') {
         const swPath = path.join(__dirname, 'static', 'sw.js');
         if (fs.existsSync(swPath)) {
-            res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
-            return fs.createReadStream(swPath).pipe(res);
+            return sendStaticFile(swPath, 'application/javascript; charset=utf-8');
         }
     }
 
@@ -528,8 +549,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (fs.existsSync(indexPath)) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        fs.createReadStream(indexPath).pipe(res);
+        return sendStaticFile(indexPath, 'text/html; charset=utf-8');
     } else {
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('index.html not found');
