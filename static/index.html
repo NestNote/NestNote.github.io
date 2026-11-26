@@ -590,21 +590,63 @@ function parseMlFromText(txt) {
   return m ? Number(m[1]) : 100;
 }
 
+function dailyWaterGoalMl(ageYr, weightKg) {
+  const a = Number(ageYr);
+  if (a > 0) {
+    if (a < 0.5) return 700;
+    if (a < 1) return 800;
+    if (a < 2) return 1000;
+    if (a < 4) return 1200;
+    if (a < 6) return 1400;
+    if (a < 9) return 1600;
+    if (a < 12) return 1900;
+    if (a < 14) return 2100;
+    return 2400;
+  }
+  const w = Number(weightKg) || 12;
+  return w <= 10 ? Math.round(w * 100) : Math.round(1000 + (w - 10) * 50);
+}
+
+function isFamilyChild(c) {
+  if (!c) return false;
+  if (Array.isArray(c.familyMembers) && c.familyMembers.length > 1) return true;
+  const authors = new Set((c.entries || []).map(e => e.author).filter(Boolean));
+  return authors.size > 1;
+}
+
+function waterGoalPreviewHtml(ageVal) {
+  const a = parseFloat(ageVal);
+  if (!(a > 0)) return '';
+  const ml = dailyWaterGoalMl(a, 0);
+  return `<div class="rounded-2xl px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold" style="background: var(--water-soft); color: var(--water);">
+    <span class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7 6.3 10.6a7 7 0 1 0 11.4 0L12 2.7z"/></svg><span>Normal daily water (${a} yr)</span></span>
+    <span class="font-bold tabular">${fmtMl(ml)} / day</span>
+  </div>`;
+}
+
+function updateWaterGoalPreview(elId, ageVal) {
+  const el = document.getElementById(elId);
+  if (el) el.innerHTML = waterGoalPreviewHtml(ageVal);
+}
+
 function normalizeServerEntry(p) {
   const type = ['temp', 'med', 'water'].includes(p.type)
     ? p.type
     : (p.med ? 'med' : (p.drink || p.ml ? 'water' : 'temp'));
   const createdAtMs = Number(p.createdAtMs) || 0;
   const time = p.time || (createdAtMs ? fmtHHMMFromMs(createdAtMs) : (p.timestamp || 'Just now'));
+  const author = p.author ? String(p.author).trim() : '';
 
   if (type === 'med') {
+    const cleanNote = (p.note && !/^Logged by /i.test(p.note)) ? p.note : '';
     return {
       id: p.id,
       type: 'med',
       title: p.title || p.med || 'Medicine',
       dose: p.dose || '',
       time,
-      note: p.note || (p.author ? `Logged by ${p.author}` : 'Medicine'),
+      note: cleanNote,
+      author,
       createdAtMs
     };
   }
@@ -617,6 +659,7 @@ function normalizeServerEntry(p) {
       wet: !!p.wet,
       time,
       note: p.note || '',
+      author,
       createdAtMs
     };
   }
@@ -627,6 +670,7 @@ function normalizeServerEntry(p) {
     tempC: Number.isNaN(tempC) ? 37.0 : tempC,
     time,
     note: p.note || statusOf(tempC).label,
+    author,
     createdAtMs
   };
 }
@@ -830,13 +874,14 @@ function renderChildSetupScreen() {
           <div class="grid grid-cols-2 gap-2.5">
             <label class="soft-pill rounded-2xl px-4 py-2.5 block" style="${errStyle('age')}">
               <span class="text-xs font-medium block" style="color: var(--muted);">Age (years) *</span>
-              <input id="setupChildAge" type="number" step="0.5" value="${esc(setupForm.age)}" oninput="setupForm.age=this.value; setupForm.badFields.delete('age'); setupForm.error='';" placeholder="e.g. 4" class="w-full bg-transparent text-sm font-semibold tabular outline-none mt-0.5" style="color: var(--ink);"/>
+              <input id="setupChildAge" type="number" step="0.5" value="${esc(setupForm.age)}" oninput="setupForm.age=this.value; setupForm.badFields.delete('age'); setupForm.error=''; updateWaterGoalPreview('setupWaterGoal', this.value);" placeholder="e.g. 4" class="w-full bg-transparent text-sm font-semibold tabular outline-none mt-0.5" style="color: var(--ink);"/>
             </label>
             <label class="soft-pill rounded-2xl px-4 py-2.5 block" style="${errStyle('weight')}">
               <span class="text-xs font-medium block" style="color: var(--muted);">${wLabel}</span>
               <input id="setupChildWeight" type="number" step="0.1" value="${esc(setupForm.weight)}" oninput="setupForm.weight=this.value; setupForm.badFields.delete('weight'); setupForm.error='';" placeholder="${wPlaceholder}" class="w-full bg-transparent text-sm font-semibold tabular outline-none mt-0.5" style="color: var(--ink);"/>
             </label>
           </div>
+          <div id="setupWaterGoal">${waterGoalPreviewHtml(setupForm.age)}</div>
 
           <label class="soft-pill rounded-2xl px-4 py-2.5 block" style="border: 1.5px solid transparent;">
             <span class="text-xs font-medium block" style="color: var(--muted);">Allergies (optional)</span>
@@ -898,8 +943,9 @@ function renderToday() {
   const lastMed = c.entries.find(e => e.type === 'med');
   const waters = c.entries.filter(e => e.type === 'water');
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
-  const targetMl = c.weightKg <= 10 ? c.weightKg * 100 : Math.round(1000 + (c.weightKg - 10) * 50);
+  const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
   const waterPct = Math.min(100, Math.round((waterMl / targetMl) * 100));
+  const showAuthor = isFamilyChild(c);
   const list = state.showAll ? c.entries : c.entries.slice(0, 4);
 
   return `
@@ -977,7 +1023,7 @@ function renderToday() {
           </div>
           <div class="relative z-10 mt-2">
             <div class="text-base font-bold tabular" style="color: var(--ink);">${fmtMl(waterMl)}</div>
-            <div class="text-xs mt-0.5 tabular" style="color: var(--water); font-weight: 600;">${waterPct}% of goal</div>
+            <div class="text-xs mt-0.5 tabular" style="color: var(--water); font-weight: 600;">${waterPct}% of ${fmtMl(targetMl)}</div>
           </div>
         </button>
       </div>
@@ -995,7 +1041,12 @@ function renderToday() {
               const bg = isT ? statusOf(e.tempC).hex : isM ? 'var(--med)' : '#0EA5E9';
               const icon = isT ? ICONS.today : isM ? ICONS.pill : ICONS.drop;
               const title = isT ? 'Temperature' : isM ? `${esc(e.title)}${e.dose ? ' · ' + esc(e.dose) : ''}` : `${fmtMl(e.ml)} ${esc(e.title)}`;
-              const sub = isT ? `${esc(e.time)} · ${esc(e.note || 'Reading')}` : isM ? `${esc(e.time)} · ${esc(e.note)}` : `${esc(e.time)}${e.wet ? ' · Wet diaper' : ''}`;
+              const byTag = (showAuthor && e.author) ? ` · by ${esc(e.author)}` : '';
+              const sub = isT
+                ? `${esc(e.time)} · ${esc(e.note || 'Reading')}${byTag}`
+                : isM
+                  ? `${esc(e.time)}${e.note ? ' · ' + esc(e.note) : ''}${byTag || (e.author ? ' · by ' + esc(e.author) : '')}`
+                  : `${esc(e.time)}${e.wet ? ' · Wet diaper' : ''}${byTag}`;
               const val = isT ? fmtT(e.tempC).full : isM ? esc(e.dose || 'Logged') : `+${fmtMl(e.ml)}`;
               return `
                 <button onclick="openDetail('${esc(e.id)}')" class="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer hover:opacity-90">
@@ -1071,13 +1122,15 @@ function renderChart() {
 function renderFamily() {
   const c = child();
   const activeCode = (c && c.familyCode) ? c.familyCode : state.familyCode;
-  const memberCount = (c && Array.isArray(c.familyMembers) && c.familyMembers.length) ? c.familyMembers.length : 1;
+  const members = (c && Array.isArray(c.familyMembers)) ? c.familyMembers : [];
+  const memberCount = members.length || 1;
+  const showAuthor = isFamilyChild(c);
 
   return `
     <div class="pt-6 px-4 pb-28 space-y-4">
       <div class="px-1">
         <h2 class="text-2xl font-bold" style="color: var(--ink);">Family</h2>
-        <p class="text-xs mt-0.5" style="color: var(--muted);">Children profiles, partner sync &amp; care checklist</p>
+        <p class="text-xs mt-0.5" style="color: var(--muted);">Children profiles, live partner sync &amp; care checklist</p>
       </div>
 
       <div class="glass-card rounded-[28px] overflow-hidden">
@@ -1088,17 +1141,21 @@ function renderFamily() {
         <div class="pb-2">
           ${state.children.length ? state.children.map(x => {
             const act = x.id === state.childId, t = temps(x)[0];
+            const goal = dailyWaterGoalMl(x.age, x.weightKg);
             return `
-              <button onclick="selectChild('${esc(x.id)}')" class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer">
-                <div class="flex items-center gap-3 min-w-0">
+              <div class="w-full flex items-center justify-between gap-2 px-4 py-3">
+                <button onclick="selectChild('${esc(x.id)}')" class="flex-1 flex items-center gap-3 min-w-0 text-left cursor-pointer">
                   <span class="w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-bold text-white shrink-0" style="background: ${act ? 'var(--brand)' : 'var(--med)'};">${esc(x.name[0])}</span>
                   <div class="min-w-0">
                     <div class="text-sm font-bold truncate" style="color: var(--ink);">${esc(x.name)}</div>
-                    <div class="text-xs truncate" style="color: var(--muted);">${x.age} yr · ${fmtW(x.weightKg)}${t ? ` · ${fmtT(t.tempC).full}` : ''}</div>
+                    <div class="text-xs truncate" style="color: var(--muted);">${x.age} yr · ${fmtW(x.weightKg)} · ${fmtMl(goal)}/day${t ? ` · ${fmtT(t.tempC).full}` : ''}</div>
                   </div>
+                </button>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  ${act ? `<button onclick="openSheet('editChild')" class="px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer soft-pill" style="color: var(--muted);">Edit</button>` : ''}
+                  <button onclick="selectChild('${esc(x.id)}')" class="px-2.5 py-1 rounded-full text-xs font-semibold cursor-pointer" style="background: ${act ? 'var(--brand-soft)' : 'var(--soft)'}; color: ${act ? 'var(--brand)' : 'var(--muted)'};">${act ? 'Active' : 'Switch'}</button>
                 </div>
-                <span class="px-2.5 py-1 rounded-full text-xs font-semibold shrink-0" style="background: ${act ? 'var(--brand-soft)' : 'var(--soft)'}; color: ${act ? 'var(--brand)' : 'var(--muted)'};">${act ? 'Active' : 'Switch'}</span>
-              </button>`;
+              </div>`;
           }).join('') : `<div class="px-4 py-4 text-xs text-center" style="color: var(--muted);">No children added yet. Tap + Add child above.</div>`}
         </div>
       </div>
@@ -1107,10 +1164,17 @@ function renderFamily() {
         <div class="flex items-center justify-between">
           <div>
             <div class="text-sm font-bold">Family Share${c ? ` · ${esc(c.name)}` : ''}</div>
-            <div class="text-xs mt-0.5" style="color: var(--muted);">${state.token ? 'Share code with another parent to sync live' : 'Send a private share link to another parent'}</div>
+            <div class="text-xs mt-0.5" style="color: var(--muted);">${state.token ? 'Real-time sync across all linked parents' : 'Send a private share link to another parent'}</div>
           </div>
-          <span class="px-2.5 py-1 rounded-full text-xs font-semibold" style="background: var(--brand-soft); color: var(--brand);">${memberCount > 1 ? `● ${memberCount} synced` : '● Ready'}</span>
+          <span class="px-2.5 py-1 rounded-full text-xs font-semibold" style="background: var(--brand-soft); color: var(--brand);">${memberCount > 1 ? `● ${memberCount} synced` : (state.token ? (syncLive ? '● Live' : '● Syncing') : '● Ready')}</span>
         </div>
+        ${members.length ? `
+          <div class="flex flex-wrap gap-1.5">
+            ${members.map(m => {
+              const mName = typeof m === 'string' ? 'Parent' : (m.name || 'Parent');
+              return `<span class="soft-pill px-2.5 py-1 rounded-full text-xs font-semibold" style="color: var(--ink);">${esc(mName)}</span>`;
+            }).join('')}
+          </div>` : ''}
         <div class="soft-pill rounded-2xl p-3.5 flex items-center justify-between gap-2">
           <div><div class="text-xs" style="color: var(--muted);">Family Code</div><div class="text-base font-bold tracking-wider tabular">${esc(activeCode)}</div></div>
           <button onclick="copyFamilyCode()" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer shrink-0" style="background: var(--card-solid); color: var(--brand);">${state.token ? 'Copy Code' : 'Copy Share Link'}</button>
@@ -1133,13 +1197,19 @@ function renderFamily() {
         </div>
         <div class="space-y-2">
           ${c.reminders.length ? c.reminders.map(r => `
-            <button onclick="toggleRem('${esc(r.id)}')" class="w-full soft-pill rounded-2xl px-3.5 py-3 flex items-center justify-between gap-3 text-left cursor-pointer">
-              <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-full soft-pill rounded-2xl px-3.5 py-3 flex items-center justify-between gap-2">
+              <button onclick="toggleRem('${esc(r.id)}')" class="flex-1 flex items-center gap-2.5 min-w-0 text-left cursor-pointer">
                 <span class="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style="background:${r.done?'var(--brand)':'transparent'}; border:2px solid ${r.done?'var(--brand)':'var(--muted)'}; color:#FFF;">${r.done ? ICONS.check : ''}</span>
-                <span class="text-xs font-semibold truncate ${r.done ? 'line-through opacity-55' : ''}">${esc(r.text)}</span>
+                <div class="min-w-0">
+                  <div class="text-xs font-semibold truncate ${r.done ? 'line-through opacity-55' : ''}">${esc(r.text)}</div>
+                  ${showAuthor && r.author ? `<div class="text-[11px] truncate" style="color: var(--muted);">by ${esc(r.author)}</div>` : ''}
+                </div>
+              </button>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="text-xs tabular" style="color: var(--muted);">${esc(r.when)}</span>
+                <button onclick="deleteRem('${esc(r.id)}')" title="Remove task" class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold opacity-55 hover:opacity-100 cursor-pointer" style="color: var(--muted);">×</button>
               </div>
-              <span class="text-xs shrink-0 tabular" style="color: var(--muted);">${esc(r.when)}</span>
-            </button>`).join('') : `<div class="text-xs text-center py-2" style="color: var(--muted);">No care tasks yet.</div>`}
+            </div>`).join('') : `<div class="text-xs text-center py-2" style="color: var(--muted);">No care tasks yet.</div>`}
         </div>
       </div>` : ''}
     </div>`;
@@ -1153,8 +1223,9 @@ function buildSummaryText(c) {
   const peakEntry = tList.length ? tList.reduce((a, b) => (b.tempC > a.tempC ? b : a), tList[0]) : null;
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
   const wetCount = waters.filter(w => w.wet).length;
-  const targetMl = c.weightKg <= 10 ? c.weightKg * 100 : Math.round(1000 + (c.weightKg - 10) * 50);
+  const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
   const waterPct = Math.min(100, Math.round((waterMl / targetMl) * 100));
+  const showAuthor = isFamilyChild(c);
 
   const lines = [
     `NestNote Clinical Handover Summary`,
@@ -1164,15 +1235,16 @@ function buildSummaryText(c) {
     ...(c.doctor ? [`Pediatrician: ${c.doctor}`] : []),
     `Latest Temperature: ${latest ? `${fmtT(latest.tempC).full} (${statusOf(latest.tempC).label}) at ${latest.time}` : 'None'}`,
     `Peak Temperature: ${peakEntry ? `${fmtT(peakEntry.tempC).full} at ${peakEntry.time}` : 'None'}`,
-    `Medicines Given: ${meds.length ? meds.map(m => `${m.title}${m.dose ? ' ' + m.dose : ''} (${m.time})`).join(', ') : 'None'}`,
-    `Fluids Today: ${fmtMl(waterMl)} (${waterPct}% of ${fmtMl(targetMl)} goal) · ${wetCount} wet ${wetCount === 1 ? 'diaper' : 'diapers'}`,
+    `Medicines Given: ${meds.length ? meds.map(m => `${m.title}${m.dose ? ' ' + m.dose : ''} (${m.time}${showAuthor && m.author ? ', by ' + m.author : ''})`).join(', ') : 'None'}`,
+    `Fluids Today: ${fmtMl(waterMl)} (${waterPct}% of ${fmtMl(targetMl)} daily goal for ${c.age} yr) · ${wetCount} wet ${wetCount === 1 ? 'diaper' : 'diapers'}`,
     ``,
     `Full Timeline (${c.entries.length} entries):`
   ];
   c.entries.forEach(e => {
-    if (e.type === 'temp') lines.push(`- ${e.time} | Temp: ${fmtT(e.tempC).full} (${e.note || statusOf(e.tempC).label})`);
-    else if (e.type === 'med') lines.push(`- ${e.time} | Medicine: ${e.title}${e.dose ? ' · ' + e.dose : ''}${e.note ? ' (' + e.note + ')' : ''}`);
-    else lines.push(`- ${e.time} | Fluids: +${fmtMl(e.ml)} ${e.title || 'Water'}${e.wet ? ' · Wet diaper' : ''}`);
+    const byStr = (showAuthor && e.author) ? ` · by ${e.author}` : '';
+    if (e.type === 'temp') lines.push(`- ${e.time} | Temp: ${fmtT(e.tempC).full} (${e.note || statusOf(e.tempC).label})${byStr}`);
+    else if (e.type === 'med') lines.push(`- ${e.time} | Medicine: ${e.title}${e.dose ? ' · ' + e.dose : ''}${e.note ? ' (' + e.note + ')' : ''}${byStr}`);
+    else lines.push(`- ${e.time} | Fluids: +${fmtMl(e.ml)} ${e.title || 'Water'}${e.wet ? ' · Wet diaper' : ''}${byStr}`);
   });
   return lines.join('\n');
 }
@@ -1188,8 +1260,9 @@ function renderReport() {
   const peakEntry = tList.length ? tList.reduce((a, b) => (b.tempC > a.tempC ? b : a), tList[0]) : null;
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
   const wetCount = waters.filter(w => w.wet).length;
-  const targetMl = c.weightKg <= 10 ? c.weightKg * 100 : Math.round(1000 + (c.weightKg - 10) * 50);
+  const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
   const waterPct = Math.min(100, Math.round((waterMl / targetMl) * 100));
+  const showAuthor = isFamilyChild(c);
   const generatedStr = new Date().toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   // Compact Temperature Curve SVG for the clinical handover report
@@ -1273,7 +1346,7 @@ function renderReport() {
         <div class="soft-pill rounded-2xl p-3.5 text-xs grid grid-cols-1 sm:grid-cols-2 gap-1.5" style="color: var(--muted);">
           <div><strong style="color: var(--ink);">Child:</strong> ${esc(c.name)}, ${c.age} yr, ${fmtW(c.weightKg)}</div>
           <div><strong style="color: var(--ink);">Allergies:</strong> ${esc(c.allergies || 'None')}</div>
-          <div><strong style="color: var(--ink);">Hydration Target:</strong> ${fmtMl(targetMl)} / day</div>
+          <div><strong style="color: var(--ink);">Daily Water Goal (${c.age} yr):</strong> ${fmtMl(targetMl)} / day</div>
           ${c.doctor ? `<div><strong style="color: var(--ink);">Pediatrician:</strong> ${esc(c.doctor)}</div>` : ''}
         </div>
 
@@ -1297,7 +1370,7 @@ function renderReport() {
             <div class="py-2.5 flex items-center justify-between gap-3 text-xs">
               <div class="min-w-0">
                 <div class="font-bold truncate" style="color: var(--ink);">${esc(m.title)}${m.dose ? ` · ${esc(m.dose)}` : ''}</div>
-                <div class="truncate" style="color: var(--muted);">${esc(m.note || 'Medicine')}</div>
+                <div class="truncate" style="color: var(--muted);">${m.note ? esc(m.note) : 'Medicine'}${showAuthor && m.author ? ` · by ${esc(m.author)}` : ''}</div>
               </div>
               <span class="font-bold tabular shrink-0" style="color: var(--ink);">${esc(m.time)}</span>
             </div>`).join('')}
@@ -1316,7 +1389,12 @@ function renderReport() {
               const isT = e.type === 'temp', isM = e.type === 'med';
               const dot = isT ? statusOf(e.tempC).hex : isM ? '#7A5AF8' : '#0EA5E9';
               const label = isT ? 'Temperature' : isM ? esc(e.title) : `${fmtMl(e.ml)} ${esc(e.title || 'Water')}`;
-              const detail = isT ? esc(e.note || statusOf(e.tempC).label) : isM ? `${esc(e.dose || '')}${e.note ? ' · ' + esc(e.note) : ''}` : (e.wet ? 'Wet diaper' : 'Hydration');
+              const byTag = (showAuthor && e.author) ? ` · by ${esc(e.author)}` : '';
+              const detail = isT
+                ? `${esc(e.note || statusOf(e.tempC).label)}${byTag}`
+                : isM
+                  ? `${esc(e.dose || 'Medicine')}${e.note ? ' · ' + esc(e.note) : ''}${byTag}`
+                  : `${e.wet ? 'Wet diaper' : 'Hydration'}${byTag}`;
               const val = isT ? fmtT(e.tempC).full : isM ? esc(e.dose || 'Given') : `+${fmtMl(e.ml)}`;
               return `
                 <div class="py-2.5 flex items-center justify-between gap-3 text-xs">
@@ -1373,17 +1451,20 @@ function renderSettings() {
           <div class="text-sm font-bold">3-Hour Fever Reminder</div>
           <div class="text-xs mt-0.5" style="color: var(--muted);">Auto-starts at ${fmtT(38.0).full} or above</div>
         </div>
-        <button onclick="state.alarmOn=!state.alarmOn; persist(); render();" class="w-12 h-7 rounded-full p-0.5 flex items-center cursor-pointer transition ${state.alarmOn?'justify-end':'justify-start'}" style="background:${state.alarmOn?'var(--brand)':'var(--soft)'};">
+        <button onclick="toggleAlarm()" class="w-12 h-7 rounded-full p-0.5 flex items-center cursor-pointer transition ${state.alarmOn?'justify-end':'justify-start'}" style="background:${state.alarmOn?'var(--brand)':'var(--soft)'};">
           <span class="w-6 h-6 rounded-full bg-white shadow"></span>
         </button>
       </div>
 
-      <div class="glass-card rounded-[28px] p-4 flex items-center justify-between">
-        <div>
+      <div class="glass-card rounded-[28px] p-4 flex items-center justify-between gap-2">
+        <div class="min-w-0">
           <div class="text-sm font-bold">Account</div>
-          <div class="text-xs mt-0.5" style="color: var(--muted);">${esc(state.userName || 'Guest')} · ${state.token ? 'Cloud synced' : (state.localUser ? 'Saved on this device' : 'Guest on this device')}</div>
+          <div class="text-xs mt-0.5 truncate" style="color: var(--muted);">${esc(state.userName || 'Guest')} · ${state.token ? (syncLive ? '● Live synced' : 'Cloud synced') : (state.localUser ? 'Saved on this device' : 'Guest on this device')}</div>
         </div>
-        <button onclick="signOut()" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer soft-pill" style="color: var(--brand);">${(state.token || state.localUser) ? 'Sign Out' : 'Sign In'}</button>
+        <div class="flex items-center gap-2 shrink-0">
+          ${state.token ? `<button onclick="syncFromServer({ force: true, notify: true })" class="px-3 py-2 rounded-full text-xs font-semibold cursor-pointer soft-pill" style="color: var(--ink);">Sync</button>` : ''}
+          <button onclick="signOut()" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer soft-pill" style="color: var(--brand);">${(state.token || state.localUser) ? 'Sign Out' : 'Sign In'}</button>
+        </div>
       </div>
     </div>`;
 }
@@ -1391,6 +1472,10 @@ function renderSettings() {
 // ==================== BOTTOM SHEETS ====================
 let sheet = null;
 let detailId = null;
+let syncLive = false;
+let pendingRender = false;
+let syncSource = null;
+let syncReconnectTimer = null;
 
 function openSheet(name) {
   sheet = name;
@@ -1403,7 +1488,14 @@ function openSheet(name) {
   document.getElementById('sheetBg').classList.add('open');
 }
 function openDetail(id) { detailId = id; openSheet('detail'); }
-function closeSheet() { document.getElementById('sheetBg').classList.remove('open'); sheet = null; }
+function closeSheet() {
+  document.getElementById('sheetBg').classList.remove('open');
+  sheet = null;
+  if (pendingRender) {
+    pendingRender = false;
+    render();
+  }
+}
 
 function updateThermoFromPointer(clientX) {
   const cap = document.getElementById('thermoCapillary');
@@ -1521,6 +1613,8 @@ function renderSheet() {
     const wReadout = state.unit === 'imperial'
       ? `<span class="text-[46px] leading-none">${ozParts[0]}</span><span class="text-2xl opacity-80">.${ozParts[1]} oz</span>`
       : `<span class="text-[46px] leading-none">${Math.round(draft.ml)}</span><span class="text-2xl opacity-80"> ml</span>`;
+    const todayMl = c ? c.entries.filter(e => e.type === 'water').reduce((s, w) => s + (w.ml || 0), 0) : 0;
+    const goalMl = c ? dailyWaterGoalMl(c.age, c.weightKg) : 1200;
     b.innerHTML = `
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-bold">Log Water</h3>
@@ -1556,7 +1650,7 @@ function renderSheet() {
             ${wLabels.map(v => `<span>${state.unit==='imperial' ? Math.round(v/29.5735) + 'oz' : v}</span>`).join('')}
           </div>
         </div>
-        <div class="text-center text-xs mt-2.5" style="color: var(--muted);">Slide along the water gauge to set amount</div>
+        <div class="text-center text-xs mt-2.5 tabular" style="color: var(--muted);">Today: ${fmtMl(todayMl)} / ${fmtMl(goalMl)} (${c ? c.age : 4} yr goal)</div>
       </div>
       <button onclick="draft.wet=!draft.wet; renderSheet();" class="w-full soft-pill rounded-2xl px-4 py-3.5 flex items-center justify-between mb-5 cursor-pointer">
         <span class="text-xs font-bold">Also had a wet diaper</span>
@@ -1591,11 +1685,27 @@ function renderSheet() {
       <div class="space-y-2.5 mb-5">
         <input id="newChildName" type="text" placeholder="Child's name *" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
         <div class="grid grid-cols-2 gap-2.5">
-          <input id="newChildAge" type="number" step="0.5" placeholder="Age (yr) *" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
+          <input id="newChildAge" type="number" step="0.5" oninput="updateWaterGoalPreview('addChildWaterGoal', this.value)" placeholder="Age (yr) *" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
           <input id="newChildKg" type="number" step="0.1" placeholder="Weight (${state.unit==='imperial'?'lb':'kg'}) *" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
         </div>
+        <div id="addChildWaterGoal"></div>
       </div>
       <button onclick="addChild()" class="w-full py-3.5 rounded-full text-sm font-bold cursor-pointer" style="background: var(--cta-bg); color: var(--cta-ink);">Save Child</button>`;
+  } else if (sheet === 'editChild' && c) {
+    const dispW = state.unit === 'imperial' ? +(c.weightKg * 2.20462).toFixed(1) : c.weightKg;
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Edit ${esc(c.name)}</h3><button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button></div>
+      <div class="space-y-2.5 mb-5">
+        <input id="editChildName" type="text" value="${esc(c.name)}" placeholder="Child's name *" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
+        <div class="grid grid-cols-2 gap-2.5">
+          <input id="editChildAge" type="number" step="0.5" value="${c.age}" oninput="updateWaterGoalPreview('editChildWaterGoal', this.value)" placeholder="Age (yr) *" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
+          <input id="editChildKg" type="number" step="0.1" value="${dispW}" placeholder="Weight (${state.unit==='imperial'?'lb':'kg'}) *" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
+        </div>
+        <div id="editChildWaterGoal">${waterGoalPreviewHtml(c.age)}</div>
+        <input id="editChildAllergies" type="text" value="${esc(c.allergies === 'None' ? '' : c.allergies)}" placeholder="Allergies (optional)" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
+        <input id="editChildDoctor" type="tel" value="${esc(c.doctor || '')}" placeholder="Pediatrician phone (optional)" class="w-full soft-pill rounded-2xl px-4 py-3 text-sm outline-none"/>
+      </div>
+      <button onclick="saveEditChild()" class="w-full py-3.5 rounded-full text-sm font-bold cursor-pointer" style="background: var(--cta-bg); color: var(--cta-ink);">Save Changes</button>`;
   } else if (sheet === 'detail' && c) {
     const e = c.entries.find(x => x.id === detailId);
     if (!e) return closeSheet();
@@ -1603,6 +1713,7 @@ function renderSheet() {
       <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Entry Details</h3><button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button></div>
       <div class="soft-pill rounded-3xl p-4 space-y-2 mb-5 text-xs">
         <div class="flex justify-between"><span style="color: var(--muted);">Time</span><span class="font-bold tabular">${esc(e.time)}</span></div>
+        ${e.author ? `<div class="flex justify-between"><span style="color: var(--muted);">Logged by</span><span class="font-bold">${esc(e.author)}</span></div>` : ''}
         ${e.type === 'temp' ? `<div class="flex justify-between"><span style="color: var(--muted);">Reading</span><span class="font-bold tabular">${fmtT(e.tempC).full} (${esc(e.note)})</span></div>` : ''}
         ${e.type === 'med' ? `<div class="flex justify-between"><span style="color: var(--muted);">Medicine</span><span class="font-bold">${esc(e.title)}${e.dose ? ' · ' + esc(e.dose) : ''}</span></div>` : ''}
         ${e.type === 'water' ? `<div class="flex justify-between"><span style="color: var(--muted);">Water</span><span class="font-bold tabular">+${fmtMl(e.ml)}${e.wet ? ' · Wet diaper' : ''}</span></div>` : ''}
@@ -1706,6 +1817,8 @@ async function submitAuth() {
     state.localUser = '';
     state.userName = r.data.user?.name || authForm.name || authForm.user.split('@')[0];
     state.theme = validThemeId(r.data.user?.theme || state.theme);
+    if (r.data.user?.unit === 'metric' || r.data.user?.unit === 'imperial') state.unit = r.data.user.unit;
+    if (typeof r.data.user?.alarmOn === 'boolean') state.alarmOn = r.data.user.alarmOn;
     state.children = (r.data.children || []).map(normalizeServerChild);
     state.childId = state.children[0]?.id || null;
     state.signedIn = true;
@@ -1715,6 +1828,7 @@ async function submitAuth() {
     authForm.error = '';
     state.view = state.children.length ? 'app' : 'childSetup';
     persist();
+    connectSyncStream();
     render();
     toast(state.children.length ? `Welcome back, ${state.userName}` : 'Step 2: Add your child');
   } catch {
@@ -1723,6 +1837,7 @@ async function submitAuth() {
 }
 
 function enterGuest() {
+  disconnectSyncStream();
   state.token = '';
   state.localUser = '';
   state.userName = 'Guest';
@@ -1734,6 +1849,7 @@ function enterGuest() {
 }
 
 async function signOut() {
+  disconnectSyncStream();
   if (state.token) {
     apiCall('POST', '/api/logout').catch(() => {});
   }
@@ -1986,7 +2102,7 @@ async function saveTemp() {
     } catch {}
   }
 
-  c.entries.unshift({ id: 't' + nowMs, type: 'temp', tempC: tempVal, time: hhmm, note, createdAtMs: nowMs });
+  c.entries.unshift({ id: 't' + nowMs, type: 'temp', tempC: tempVal, time: hhmm, note, author: state.userName || 'Parent', createdAtMs: nowMs });
   persist(); render(); toast(`Saved ${fmtT(tempVal).full}`);
 }
 
@@ -1999,14 +2115,13 @@ async function saveMed() {
   const nowMs = Date.now();
   const hhmm = nowHHMM();
   const doseStr = `${draft.dose} ${draft.medUnit}`;
-  const note = `Logged by ${state.userName || 'Parent'}`;
   draft.medName = '';
   closeSheet();
 
   if (state.token) {
     try {
       const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
-        type: 'med', title: name, dose: doseStr, med: `${name} ${doseStr}`, time: hhmm, note, createdAtMs: nowMs
+        type: 'med', title: name, dose: doseStr, med: `${name} ${doseStr}`, time: hhmm, note: '', createdAtMs: nowMs
       });
       if (r.ok && r.data) {
         c.entries.unshift(normalizeServerEntry(r.data));
@@ -2016,7 +2131,7 @@ async function saveMed() {
     } catch {}
   }
 
-  c.entries.unshift({ id: 'm' + nowMs, type: 'med', title: name, dose: doseStr, time: hhmm, note, createdAtMs: nowMs });
+  c.entries.unshift({ id: 'm' + nowMs, type: 'med', title: name, dose: doseStr, time: hhmm, note: '', author: state.userName || 'Parent', createdAtMs: nowMs });
   persist(); render(); toast(`Logged ${name}`);
 }
 
@@ -2042,7 +2157,7 @@ async function saveWater() {
     } catch {}
   }
 
-  c.entries.unshift({ id: 'w' + nowMs, type: 'water', title: 'Water', ml: mlVal, wet: wetVal, time: hhmm, createdAtMs: nowMs });
+  c.entries.unshift({ id: 'w' + nowMs, type: 'water', title: 'Water', ml: mlVal, wet: wetVal, time: hhmm, author: state.userName || 'Parent', createdAtMs: nowMs });
   persist(); render(); toast(`Added +${fmtMl(mlVal)}`);
 }
 
@@ -2111,15 +2226,50 @@ async function addReminder() {
     try {
       const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/reminders`, { title: txt, time: 'Today' });
       if (r.ok && r.data) {
-        c.reminders.unshift({ id: r.data.id, text: r.data.title, when: r.data.time || 'Today', done: false });
+        c.reminders.unshift({ id: r.data.id, text: r.data.title, when: r.data.time || 'Today', done: false, author: r.data.author || state.userName || '' });
         persist(); render(); toast('Added care task');
         return;
       }
     } catch {}
   }
 
-  c.reminders.unshift({ id: 'r' + Date.now(), text: txt, when: 'Today', done: false });
+  c.reminders.unshift({ id: 'r' + Date.now(), text: txt, when: 'Today', done: false, author: state.userName || 'Parent' });
   persist(); render(); toast('Added care task');
+}
+
+async function deleteRem(id) {
+  const c = child();
+  if (!c) return;
+  c.reminders = c.reminders.filter(r => r.id !== id);
+  persist(); render(); toast('Removed task');
+  if (state.token) {
+    apiCall('DELETE', `/api/children/${encodeURIComponent(c.id)}/reminders/${encodeURIComponent(id)}`).catch(() => {});
+  }
+}
+
+async function saveEditChild() {
+  const c = child();
+  if (!c) return;
+  const name = (document.getElementById('editChildName')?.value || '').trim();
+  const age = parseFloat(document.getElementById('editChildAge')?.value);
+  const rawW = parseFloat(document.getElementById('editChildKg')?.value);
+  const allergies = (document.getElementById('editChildAllergies')?.value || '').trim() || 'None';
+  const doctor = (document.getElementById('editChildDoctor')?.value || '').trim();
+  if (!name || !(age > 0) || !(rawW > 0)) return toast("Enter child's name, age, and weight");
+  const kg = state.unit === 'imperial' ? +(rawW / 2.20462).toFixed(1) : rawW;
+
+  c.name = name;
+  c.age = age;
+  c.weightKg = kg;
+  c.allergies = allergies;
+  c.doctor = doctor;
+  persist(); closeSheet(); render(); toast(`Updated ${name}`);
+
+  if (state.token) {
+    apiCall('PUT', `/api/children/${encodeURIComponent(c.id)}/meta`, {
+      name, age, weight: kg, allergies, doctorPhone: doctor
+    }).catch(() => {});
+  }
 }
 
 async function addChild() {
@@ -2174,11 +2324,27 @@ function setTheme(id) {
   state.theme = validThemeId(id);
   persist();
   render();
-  if (state.token) apiCall('PUT', '/api/user/theme', { theme: state.theme }).catch(() => {});
+  if (state.token) apiCall('PUT', '/api/user/prefs', { theme: state.theme }).catch(() => {});
 }
-function setUnit(u) { state.unit = u; persist(); render(); }
+function setUnit(u) {
+  state.unit = u;
+  persist();
+  render();
+  if (state.token) apiCall('PUT', '/api/user/prefs', { unit: state.unit }).catch(() => {});
+}
+function toggleAlarm() {
+  state.alarmOn = !state.alarmOn;
+  persist();
+  render();
+  if (state.token) apiCall('PUT', '/api/user/prefs', { alarmOn: state.alarmOn }).catch(() => {});
+}
 function selectChild(id) { state.childId = id; persist(); render(); }
-function switchTab(t) { state.tab = t; window.scrollTo(0, 0); render(); }
+function switchTab(t) {
+  state.tab = t;
+  window.scrollTo(0, 0);
+  render();
+  if (state.token) syncFromServer();
+}
 
 function render() {
   const th = currentThemeObj();
@@ -2224,22 +2390,86 @@ function render() {
   }).join('');
 }
 
-// ==================== BOOTSTRAP & CO-PARENT LIVE SYNC ====================
-async function syncFromServer() {
-  if (!state.token || state.view !== 'app' || sheet || document.hidden) return;
-  const activeTag = document.activeElement?.tagName;
-  if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+// ==================== BOOTSTRAP & FULL REAL-TIME CO-PARENT SYNC ====================
+function disconnectSyncStream() {
+  clearTimeout(syncReconnectTimer);
+  syncReconnectTimer = null;
+  if (syncSource) {
+    try { syncSource.close(); } catch {}
+    syncSource = null;
+  }
+  syncLive = false;
+}
+
+function connectSyncStream() {
+  disconnectSyncStream();
+  if (!state.token || typeof EventSource === 'undefined') return;
+  try {
+    const url = `${API_BASE}/api/stream?token=${encodeURIComponent(state.token)}`;
+    const es = new EventSource(url);
+    syncSource = es;
+    es.onopen = () => {
+      syncLive = true;
+      if (state.view === 'app' && (state.tab === 'family' || state.tab === 'settings') && !sheet) render();
+    };
+    es.onmessage = ev => {
+      try {
+        const msg = JSON.parse(ev.data || '{}');
+        if (msg.type === 'connected') {
+          syncLive = true;
+          return;
+        }
+        syncFromServer({ force: true });
+        if (msg.type === 'family_joined' && msg.member && msg.member !== state.userName) {
+          toast(`${msg.member} joined your NestNote family`);
+        } else if (msg.type === 'entry_added' && msg.author && msg.author !== state.userName) {
+          toast(`New update from ${msg.author}`);
+        }
+      } catch {}
+    };
+    es.onerror = () => {
+      syncLive = false;
+      try { es.close(); } catch {}
+      if (syncSource === es) syncSource = null;
+      if (state.token) {
+        clearTimeout(syncReconnectTimer);
+        syncReconnectTimer = setTimeout(connectSyncStream, 4000);
+      }
+    };
+  } catch {}
+}
+
+let syncInFlight = false;
+async function syncFromServer(opts = {}) {
+  if (!state.token || syncInFlight) return;
+  if (!opts.force && (state.view !== 'app' || document.hidden)) return;
+  syncInFlight = true;
   try {
     const r = await apiCall('GET', '/api/me');
     if (r.ok && r.data) {
+      if (r.data.user) {
+        state.userName = r.data.user.name || state.userName;
+        if (r.data.user.theme) state.theme = validThemeId(r.data.user.theme);
+        if (r.data.user.unit === 'metric' || r.data.user.unit === 'imperial') state.unit = r.data.user.unit;
+        if (typeof r.data.user.alarmOn === 'boolean') state.alarmOn = r.data.user.alarmOn;
+      }
       state.children = (r.data.children || []).map(normalizeServerChild);
       if (state.children.length && !state.children.some(x => x.id === state.childId)) {
         state.childId = state.children[0].id;
       }
       persist();
-      render();
+      const activeTag = document.activeElement?.tagName;
+      const userTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+      if (sheet || userTyping) {
+        pendingRender = true;
+      } else if (state.view === 'app') {
+        render();
+      }
+      if (opts.notify) toast('Synced just now');
     }
-  } catch {}
+  } catch {} finally {
+    syncInFlight = false;
+  }
 }
 
 async function bootApp() {
@@ -2254,6 +2484,8 @@ async function bootApp() {
       if (r.ok && r.data) {
         state.userName = r.data.user?.name || state.userName;
         state.theme = validThemeId(r.data.user?.theme || state.theme);
+        if (r.data.user?.unit === 'metric' || r.data.user?.unit === 'imperial') state.unit = r.data.user.unit;
+        if (typeof r.data.user?.alarmOn === 'boolean') state.alarmOn = r.data.user.alarmOn;
         state.children = (r.data.children || []).map(normalizeServerChild);
         if (state.children.length && !state.children.some(x => x.id === state.childId)) {
           state.childId = state.children[0].id;
@@ -2261,6 +2493,7 @@ async function bootApp() {
         state.signedIn = true;
         state.isGuest = false;
         persist();
+        connectSyncStream();
         nextView = state.children.length ? 'app' : 'childSetup';
       } else if (r.status === 401) {
         state.token = '';
@@ -2301,7 +2534,15 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
-setInterval(syncFromServer, 20000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.token) {
+    syncFromServer({ force: true });
+    if (!syncSource) connectSyncStream();
+  }
+});
+window.addEventListener('focus', () => { if (state.token) syncFromServer({ force: true }); });
+window.addEventListener('online', () => { if (state.token) { syncFromServer({ force: true }); connectSyncStream(); } });
+setInterval(() => syncFromServer(), 6000);
 bootApp();
 </script>
 </body>

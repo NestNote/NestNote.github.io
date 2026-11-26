@@ -1,7 +1,7 @@
 /**
  * NestNote — Render & Local Web Server
  * Zero external dependencies: pure Node.js built-in modules (http, fs, path, crypto, zlib)
- * Supports Family Multi-Access (Co-Parents) & Real-time Sync
+ * Supports Family Multi-Access (Co-Parents) & Real-time SSE Sync
  */
 
 const http = require('http');
@@ -14,6 +14,44 @@ const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'nestnote_data.json');
 const LEGACY_DB_FILE = path.join(__dirname, 'chrono_data.json');
 const SALT = 'chrono_clinical_salt_2026';
+
+// -------------------------------------------------------------
+// REAL-TIME SSE BROADCASTER (CO-PARENT & MULTI-DEVICE SYNC)
+// -------------------------------------------------------------
+const sseClients = new Map(); // userId -> Set<res>
+
+function addSseClient(userId, res) {
+    if (!sseClients.has(userId)) sseClients.set(userId, new Set());
+    sseClients.get(userId).add(res);
+}
+
+function removeSseClient(userId, res) {
+    const set = sseClients.get(userId);
+    if (!set) return;
+    set.delete(res);
+    if (set.size === 0) sseClients.delete(userId);
+}
+
+function getChildUserIds(child) {
+    if (!child) return [];
+    const ids = [child.userId];
+    if (Array.isArray(child.familyMembers)) {
+        child.familyMembers.forEach(m => ids.push(typeof m === 'string' ? m : m.userId));
+    }
+    return ids.filter(Boolean);
+}
+
+function broadcastToUsers(userIds, payload) {
+    const msg = `data: ${JSON.stringify(payload)}\n\n`;
+    const unique = new Set((userIds || []).filter(Boolean));
+    for (const uid of unique) {
+        const set = sseClients.get(uid);
+        if (!set) continue;
+        for (const clientRes of set) {
+            try { clientRes.write(msg); } catch {}
+        }
+    }
+}
 
 // -------------------------------------------------------------
 // DATA STORE (CLEAN DATABASE WITHOUT SAMPLE DATA)
@@ -123,11 +161,17 @@ function parseJsonBody(req) {
     });
 }
 
-function getAuthUserId(req) {
+function getAuthUserId(req, parsedUrl) {
     const header = req.headers['authorization'];
-    if (!header || !header.startsWith('Bearer ')) return null;
-    const token = header.slice(7).trim();
-    return db.sessions[token] || null;
+    if (header && header.startsWith('Bearer ')) {
+        const token = header.slice(7).trim();
+        return db.sessions[token] || null;
+    }
+    if (parsedUrl) {
+        const qTok = parsedUrl.searchParams.get('token');
+        if (qTok) return db.sessions[qTok.trim()] || null;
+    }
+    return null;
 }
 
 // -------------------------------------------------------------
@@ -150,6 +194,33 @@ const server = http.createServer(async (req, res) => {
     // Health check endpoint (for Render monitoring)
     if (pathname === '/api/health' || pathname === '/healthz') {
         return sendJson(res, 200, { status: 'ok', service: 'nestnote', uptime: process.uptime() });
+    }
+
+    // Real-time Server-Sent Events stream (instant co-parent & multi-device sync)
+    if (pathname === '/api/stream' && method === 'GET') {
+        const authUserId = getAuthUserId(req, parsedUrl);
+        if (!authUserId) {
+            return sendJson(res, 401, { success: false, message: 'Authentication required' });
+        }
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'X-Accel-Buffering': 'no'
+        });
+        res.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`);
+        addSseClient(authUserId, res);
+
+        const pingTimer = setInterval(() => {
+            try { res.write(': ping\n\n'); } catch {}
+        }, 25000);
+
+        req.on('close', () => {
+            clearInterval(pingTimer);
+            removeSseClient(authUserId, res);
+        });
+        return;
     }
 
     // ---------------- API ROUTES ----------------
@@ -181,6 +252,8 @@ const server = http.createServer(async (req, res) => {
                     name,
                     passwordHash: hashPassword(password),
                     theme: 'cerulean',
+                    unit: 'metric',
+                    alarmOn: true,
                     createdAt: new Date().toISOString()
                 };
 
@@ -248,7 +321,7 @@ const server = http.createServer(async (req, res) => {
             }
 
             // Authenticated routes
-            const authUserId = getAuthUserId(req);
+            const authUserId = getAuthUserId(req, parsedUrl);
             if (!authUserId) {
                 return sendJson(res, 401, { success: false, message: 'Authentication required' });
             }
@@ -273,8 +346,24 @@ const server = http.createServer(async (req, res) => {
                 if (db.users[authUserId]) {
                     db.users[authUserId].theme = theme;
                     saveDatabase();
+                    broadcastToUsers([authUserId], { type: 'prefs', ts: Date.now() });
                 }
                 return sendJson(res, 200, { success: true, data: theme });
+            }
+
+            // PUT /api/user/prefs (Full user preference sync: theme, unit, alarmOn)
+            if (pathname === '/api/user/prefs' && method === 'PUT') {
+                const body = await parseJsonBody(req);
+                if (db.users[authUserId]) {
+                    if (body.theme) db.users[authUserId].theme = String(body.theme);
+                    if (body.unit === 'metric' || body.unit === 'imperial') db.users[authUserId].unit = body.unit;
+                    if (typeof body.alarmOn === 'boolean') db.users[authUserId].alarmOn = body.alarmOn;
+                    saveDatabase();
+                    broadcastToUsers([authUserId], { type: 'prefs', ts: Date.now() });
+                }
+                const safeUser = { ...db.users[authUserId] };
+                delete safeUser.passwordHash;
+                return sendJson(res, 200, { success: true, data: safeUser });
             }
 
             // POST /api/children (Create new child profile)
@@ -319,6 +408,7 @@ const server = http.createServer(async (req, res) => {
                 db.childrenByUser[authUserId] = db.childrenByUser[authUserId] || [];
                 db.childrenByUser[authUserId].push(childId);
                 saveDatabase();
+                broadcastToUsers([authUserId], { type: 'child_added', childId, ts: Date.now() });
 
                 return sendJson(res, 200, { success: true, data: newChild });
             }
@@ -362,6 +452,12 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 saveDatabase();
+                broadcastToUsers(getChildUserIds(matchedChild), {
+                    type: 'family_joined',
+                    childId: matchedChild.id,
+                    member: activeUser.name,
+                    ts: Date.now()
+                });
 
                 return sendJson(res, 200, {
                     success: true,
@@ -379,11 +475,13 @@ const server = http.createServer(async (req, res) => {
                     return sendJson(res, 404, { success: false, message: 'Profile not found or access denied' });
                 }
 
+                const affectedUsers = getChildUserIds(child);
                 delete db.children[childId];
                 Object.keys(db.childrenByUser).forEach(uid => {
                     db.childrenByUser[uid] = db.childrenByUser[uid].filter(id => id !== childId);
                 });
                 saveDatabase();
+                broadcastToUsers(affectedUsers, { type: 'child_deleted', childId, ts: Date.now() });
                 return sendJson(res, 200, { success: true, message: 'Profile deleted' });
             }
 
@@ -431,6 +529,13 @@ const server = http.createServer(async (req, res) => {
 
                 child.points48h.push(newEntry);
                 saveDatabase();
+                broadcastToUsers(getChildUserIds(child), {
+                    type: 'entry_added',
+                    childId,
+                    entryType,
+                    author: newEntry.author,
+                    ts: Date.now()
+                });
 
                 return sendJson(res, 200, { success: true, data: newEntry });
             }
@@ -445,6 +550,7 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 const body = await parseJsonBody(req);
+                if (body.name !== undefined && String(body.name).trim()) child.name = String(body.name).trim();
                 if (body.weight !== undefined) child.weight = parseFloat(body.weight) || child.weight;
                 if (body.height !== undefined) child.height = parseFloat(body.height) || child.height;
                 if (body.age !== undefined) child.age = parseFloat(body.age) || child.age;
@@ -458,6 +564,7 @@ const server = http.createServer(async (req, res) => {
                 if (Array.isArray(body.savedMeds)) child.savedMeds = body.savedMeds;
 
                 saveDatabase();
+                broadcastToUsers(getChildUserIds(child), { type: 'child_updated', childId, ts: Date.now() });
                 return sendJson(res, 200, { success: true, data: child });
             }
 
@@ -472,6 +579,7 @@ const server = http.createServer(async (req, res) => {
 
                 child.points48h = (child.points48h || []).filter(p => p.id !== entryId);
                 saveDatabase();
+                broadcastToUsers(getChildUserIds(child), { type: 'entry_deleted', childId, ts: Date.now() });
                 return sendJson(res, 200, { success: true, message: 'Entry deleted' });
             }
 
@@ -496,6 +604,7 @@ const server = http.createServer(async (req, res) => {
                 child.reminders = Array.isArray(child.reminders) ? child.reminders : [];
                 child.reminders.unshift(newRem);
                 saveDatabase();
+                broadcastToUsers(getChildUserIds(child), { type: 'rem_added', childId, ts: Date.now() });
                 return sendJson(res, 200, { success: true, data: newRem });
             }
 
@@ -513,6 +622,7 @@ const server = http.createServer(async (req, res) => {
 
                 rem.done = !rem.done;
                 saveDatabase();
+                broadcastToUsers(getChildUserIds(child), { type: 'rem_toggled', childId, ts: Date.now() });
                 return sendJson(res, 200, { success: true, data: rem.done });
             }
 
@@ -527,6 +637,7 @@ const server = http.createServer(async (req, res) => {
 
                 child.reminders = (child.reminders || []).filter(r => r.id !== remId);
                 saveDatabase();
+                broadcastToUsers(getChildUserIds(child), { type: 'rem_deleted', childId, ts: Date.now() });
                 return sendJson(res, 200, { success: true, message: 'Reminder deleted' });
             }
 
@@ -602,7 +713,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log('===========================================================');
-    console.log('NestNote — Server Ready (Render / Local Node)');
+    console.log('NestNote — Server Ready (Render / Local Node + SSE Sync)');
     console.log('===========================================================');
     console.log(`Server listening on port: ${PORT}`);
     console.log(`Open in browser:          http://localhost:${PORT}`);
