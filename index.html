@@ -533,12 +533,16 @@ const setupForm = { name: '', age: '', weight: '', allergies: '', doctor: '', jo
 let familyJoinInput = '';
 
 // ==================== API HELPER & NORMALIZATION ====================
+const RENDER_BACKEND = 'https://nestnote-app.onrender.com';
+const API_BASE = (window.location.hostname === 'nestnote.github.io') ? RENDER_BACKEND : '';
+
 async function apiCall(method, url, body) {
+  const fullUrl = url.startsWith('http') ? url : (API_BASE + url);
   const headers = { 'Content-Type': 'application/json' };
   if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
   const opts = { method, headers };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
+  const res = await fetch(fullUrl, opts);
   const ct = (res.headers.get('content-type') || '').toLowerCase();
   const isApiJson = ct.includes('application/json');
   let json = {};
@@ -2004,6 +2008,7 @@ async function syncFromServer() {
 
 async function bootApp() {
   render();
+  if (API_BASE) fetch(API_BASE + '/api/health').catch(() => {});
   const minSplash = new Promise(resolve => setTimeout(resolve, 1550));
 
   let nextView = 'auth';

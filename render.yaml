@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: nestnote
+    name: nestnote-app
     runtime: node
     plan: free
     region: frankfurt
