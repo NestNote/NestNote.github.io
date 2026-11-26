@@ -555,7 +555,18 @@ function persist() {
   } catch {}
 }
 
-const draft = { tempC: 37.0, medName: '', medUnit: 'ml', dose: 5.0, ml: 120, wet: false };
+const SKIN_OPTIONS = [
+  'Normal / Pink',
+  'Flushed / Red',
+  'Pale',
+  'Rash / Spots',
+  'Sweaty / Clammy',
+  'Dry / Cool',
+  'Mottled / Marbled',
+  'Hives / Welts'
+];
+
+const draft = { tempC: 37.0, medName: '', medUnit: 'ml', dose: 5.0, ml: 120, wet: false, comment: '', skinSelected: [], skinCustom: '' };
 const authForm = { name: '', user: '', pass: '', error: '', badFields: new Set() };
 const setupForm = { name: '', age: '', weight: '', allergies: '', doctor: '', joinCode: '', error: '', badFields: new Set() };
 let familyJoinInput = '';
@@ -630,13 +641,29 @@ function updateWaterGoalPreview(elId, ageVal) {
 }
 
 function normalizeServerEntry(p) {
-  const type = ['temp', 'med', 'water'].includes(p.type)
+  const type = ['temp', 'med', 'water', 'note'].includes(p.type)
     ? p.type
-    : (p.med ? 'med' : (p.drink || p.ml ? 'water' : 'temp'));
+    : (p.med ? 'med' : (p.drink || p.ml ? 'water' : (p.skin || p.comment ? 'note' : 'temp')));
   const createdAtMs = Number(p.createdAtMs) || 0;
   const time = p.time || (createdAtMs ? fmtHHMMFromMs(createdAtMs) : (p.timestamp || 'Just now'));
   const author = p.author ? String(p.author).trim() : '';
+  const comment = p.comment ? String(p.comment).trim() : '';
+  const skin = Array.isArray(p.skin)
+    ? p.skin.map(s => String(s || '').trim()).filter(Boolean)
+    : (p.skin ? [String(p.skin).trim()].filter(Boolean) : []);
 
+  if (type === 'note') {
+    return {
+      id: p.id,
+      type: 'note',
+      skin,
+      comment,
+      time,
+      note: p.note || '',
+      author,
+      createdAtMs
+    };
+  }
   if (type === 'med') {
     const cleanNote = (p.note && !/^Logged by /i.test(p.note)) ? p.note : '';
     return {
@@ -646,6 +673,7 @@ function normalizeServerEntry(p) {
       dose: p.dose || '',
       time,
       note: cleanNote,
+      comment,
       author,
       createdAtMs
     };
@@ -659,6 +687,7 @@ function normalizeServerEntry(p) {
       wet: !!p.wet,
       time,
       note: p.note || '',
+      comment,
       author,
       createdAtMs
     };
@@ -670,6 +699,7 @@ function normalizeServerEntry(p) {
     tempC: Number.isNaN(tempC) ? 37.0 : tempC,
     time,
     note: p.note || statusOf(tempC).label,
+    comment,
     author,
     createdAtMs
   };
@@ -720,6 +750,7 @@ const ICONS = {
   settings: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   pill: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>`,
   drop: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2.7 6.3 10.6a7 7 0 1 0 11.4 0L12 2.7z"/></svg>`,
+  note: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>`,
   palette: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H17c2.8 0 5-2.2 5-5 0-4.4-4.5-8.4-10-8.4z"/></svg>`,
   check: `<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
 };
@@ -941,10 +972,13 @@ function renderToday() {
   const fillPct = hasTemp ? Math.max(14, Math.min(96, ((curC - 35.5) / 5.7) * 100)) : 6;
 
   const lastMed = c.entries.find(e => e.type === 'med');
+  const lastNote = c.entries.find(e => e.type === 'note');
   const waters = c.entries.filter(e => e.type === 'water');
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
   const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
-  const waterPct = Math.min(100, Math.round((waterMl / targetMl) * 100));
+  const waterPct = Math.round((waterMl / targetMl) * 100);
+  const waterWavePct = Math.min(100, waterPct);
+  const overWater = waterMl > targetMl;
   const showAuthor = isFamilyChild(c);
   const list = state.showAll ? c.entries : c.entries.slice(0, 4);
 
@@ -1016,17 +1050,29 @@ function renderToday() {
         </button>
 
         <button onclick="openSheet('water')" class="glass-card rounded-[28px] p-4 text-left cursor-pointer relative overflow-hidden flex flex-col justify-between min-h-[120px]">
-          <div class="pointer-events-none absolute inset-x-0 bottom-0 transition-all duration-300" style="height: ${waterMl > 0 ? Math.max(18, waterPct) : 6}%; background: var(--water-fill); border-top: 1.5px solid rgba(14, 165, 233, 0.28);"></div>
+          <div class="pointer-events-none absolute inset-x-0 bottom-0 transition-all duration-300" style="height: ${waterMl > 0 ? Math.max(18, waterWavePct) : 6}%; background: var(--water-fill); border-top: 1.5px solid rgba(14, 165, 233, 0.28);"></div>
           <div class="relative z-10 flex items-center justify-between">
             <span class="text-xs font-semibold" style="color: var(--muted);">Water</span>
             <span class="w-8 h-8 rounded-2xl flex items-center justify-center" style="background: var(--water-soft); color: var(--water);">${ICONS.drop}</span>
           </div>
           <div class="relative z-10 mt-2">
             <div class="text-base font-bold tabular" style="color: var(--ink);">${fmtMl(waterMl)}</div>
-            <div class="text-xs mt-0.5 tabular" style="color: var(--water); font-weight: 600;">${waterPct}% of ${fmtMl(targetMl)}</div>
+            <div class="text-xs mt-0.5 tabular font-semibold" style="color: ${overWater ? 'var(--warn)' : 'var(--water)'};">${overWater ? `${waterPct}% · Over norm` : `${waterPct}% of ${fmtMl(targetMl)}`}</div>
           </div>
         </button>
       </div>
+
+      <!-- TACTILE SKIN COVERS & COMMENTS CARD -->
+      <button onclick="openSheet('note')" class="w-full glass-card rounded-[26px] px-4 py-3.5 text-left cursor-pointer flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style="background: var(--brand-soft); color: var(--brand);">${ICONS.note}</span>
+          <div class="min-w-0">
+            <div class="text-sm font-bold truncate" style="color: var(--ink);">Skin &amp; Comment</div>
+            <div class="text-xs truncate mt-0.5" style="color: var(--muted);">${lastNote ? esc([].concat(lastNote.skin || [], lastNote.comment ? [lastNote.comment] : []).join(' · ')) : 'Skin covers, rash, or parent note'}</div>
+          </div>
+        </div>
+        <span class="px-3 py-1.5 rounded-full text-xs font-bold shrink-0" style="background: var(--soft); color: var(--brand);">+ Add</span>
+      </button>
 
       <!-- Today List -->
       <div class="glass-card rounded-[28px] overflow-hidden">
@@ -1037,17 +1083,27 @@ function renderToday() {
         ${list.length ? `
           <div class="pb-1">
             ${list.map(e => {
-              const isT = e.type === 'temp', isM = e.type === 'med';
-              const bg = isT ? statusOf(e.tempC).hex : isM ? 'var(--med)' : '#0EA5E9';
-              const icon = isT ? ICONS.today : isM ? ICONS.pill : ICONS.drop;
-              const title = isT ? 'Temperature' : isM ? `${esc(e.title)}${e.dose ? ' · ' + esc(e.dose) : ''}` : `${fmtMl(e.ml)} ${esc(e.title)}`;
-              const byTag = (showAuthor && e.author) ? ` · by ${esc(e.author)}` : '';
-              const sub = isT
-                ? `${esc(e.time)} · ${esc(e.note || 'Reading')}${byTag}`
+              const isT = e.type === 'temp', isM = e.type === 'med', isN = e.type === 'note';
+              const bg = isT ? statusOf(e.tempC).hex : isM ? 'var(--med)' : isN ? 'var(--brand)' : '#0EA5E9';
+              const icon = isT ? ICONS.today : isM ? ICONS.pill : isN ? ICONS.note : ICONS.drop;
+              const skinStr = isN && e.skin && e.skin.length ? e.skin.join(', ') : '';
+              const title = isT
+                ? 'Temperature'
                 : isM
-                  ? `${esc(e.time)}${e.note ? ' · ' + esc(e.note) : ''}${byTag || (e.author ? ' · by ' + esc(e.author) : '')}`
-                  : `${esc(e.time)}${e.wet ? ' · Wet diaper' : ''}${byTag}`;
-              const val = isT ? fmtT(e.tempC).full : isM ? esc(e.dose || 'Logged') : `+${fmtMl(e.ml)}`;
+                  ? `${esc(e.title)}${e.dose ? ' · ' + esc(e.dose) : ''}`
+                  : isN
+                    ? (skinStr ? `Skin: ${esc(skinStr)}` : 'Parent Comment')
+                    : `${fmtMl(e.ml)} ${esc(e.title)}`;
+              const byTag = (showAuthor && e.author) ? ` · by ${esc(e.author)}` : '';
+              const cmtTag = e.comment ? ` · ${esc(e.comment)}` : '';
+              const sub = isT
+                ? `${esc(e.time)} · ${esc(e.note || 'Reading')}${cmtTag}${byTag}`
+                : isM
+                  ? `${esc(e.time)}${e.note ? ' · ' + esc(e.note) : ''}${cmtTag}${byTag || (e.author ? ' · by ' + esc(e.author) : '')}`
+                  : isN
+                    ? `${esc(e.time)}${e.comment ? ' · ' + esc(e.comment) : ''}${byTag}`
+                    : `${esc(e.time)}${e.wet ? ' · Wet diaper' : ''}${cmtTag}${byTag}`;
+              const val = isT ? fmtT(e.tempC).full : isM ? esc(e.dose || 'Logged') : isN ? (skinStr ? 'Skin' : 'Note') : `+${fmtMl(e.ml)}`;
               return `
                 <button onclick="openDetail('${esc(e.id)}')" class="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer hover:opacity-90">
                   <span class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0" style="background: ${bg};">${icon}</span>
@@ -1218,13 +1274,14 @@ function renderFamily() {
 function buildSummaryText(c) {
   const tList = temps(c);
   const meds = c.entries.filter(e => e.type === 'med');
+  const notes = c.entries.filter(e => e.type === 'note');
   const waters = c.entries.filter(e => e.type === 'water');
   const latest = tList[0] || null;
   const peakEntry = tList.length ? tList.reduce((a, b) => (b.tempC > a.tempC ? b : a), tList[0]) : null;
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
   const wetCount = waters.filter(w => w.wet).length;
   const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
-  const waterPct = Math.min(100, Math.round((waterMl / targetMl) * 100));
+  const waterPct = Math.round((waterMl / targetMl) * 100);
   const showAuthor = isFamilyChild(c);
 
   const lines = [
@@ -1236,15 +1293,20 @@ function buildSummaryText(c) {
     `Latest Temperature: ${latest ? `${fmtT(latest.tempC).full} (${statusOf(latest.tempC).label}) at ${latest.time}` : 'None'}`,
     `Peak Temperature: ${peakEntry ? `${fmtT(peakEntry.tempC).full} at ${peakEntry.time}` : 'None'}`,
     `Medicines Given: ${meds.length ? meds.map(m => `${m.title}${m.dose ? ' ' + m.dose : ''} (${m.time}${showAuthor && m.author ? ', by ' + m.author : ''})`).join(', ') : 'None'}`,
-    `Fluids Today: ${fmtMl(waterMl)} (${waterPct}% of ${fmtMl(targetMl)} daily goal for ${c.age} yr) · ${wetCount} wet ${wetCount === 1 ? 'diaper' : 'diapers'}`,
+    `Fluids Today: ${fmtMl(waterMl)} (${waterPct}% of ${fmtMl(targetMl)} daily goal for ${c.age} yr${waterPct > 100 ? ' — over daily norm' : ''}) · ${wetCount} wet ${wetCount === 1 ? 'diaper' : 'diapers'}`,
+    ...(notes.length ? [`Skin & Notes: ${notes.map(n => `${n.time} ${[].concat(n.skin || [], n.comment ? [n.comment] : []).join(' — ')}`).join('; ')}`] : []),
     ``,
     `Full Timeline (${c.entries.length} entries):`
   ];
   c.entries.forEach(e => {
     const byStr = (showAuthor && e.author) ? ` · by ${e.author}` : '';
-    if (e.type === 'temp') lines.push(`- ${e.time} | Temp: ${fmtT(e.tempC).full} (${e.note || statusOf(e.tempC).label})${byStr}`);
-    else if (e.type === 'med') lines.push(`- ${e.time} | Medicine: ${e.title}${e.dose ? ' · ' + e.dose : ''}${e.note ? ' (' + e.note + ')' : ''}${byStr}`);
-    else lines.push(`- ${e.time} | Fluids: +${fmtMl(e.ml)} ${e.title || 'Water'}${e.wet ? ' · Wet diaper' : ''}${byStr}`);
+    const cmt = e.comment ? ` · Comment: ${e.comment}` : '';
+    if (e.type === 'temp') lines.push(`- ${e.time} | Temp: ${fmtT(e.tempC).full} (${e.note || statusOf(e.tempC).label})${cmt}${byStr}`);
+    else if (e.type === 'med') lines.push(`- ${e.time} | Medicine: ${e.title}${e.dose ? ' · ' + e.dose : ''}${e.note ? ' (' + e.note + ')' : ''}${cmt}${byStr}`);
+    else if (e.type === 'note') {
+      const sk = (e.skin && e.skin.length) ? `Skin: ${e.skin.join(', ')}` : '';
+      lines.push(`- ${e.time} | ${[sk, e.comment].filter(Boolean).join(' · ')}${byStr}`);
+    } else lines.push(`- ${e.time} | Fluids: +${fmtMl(e.ml)} ${e.title || 'Water'}${e.wet ? ' · Wet diaper' : ''}${cmt}${byStr}`);
   });
   return lines.join('\n');
 }
@@ -1255,13 +1317,15 @@ function renderReport() {
   const tList = temps(c);
   const tChrono = tList.slice().reverse();
   const meds = c.entries.filter(e => e.type === 'med');
+  const notes = c.entries.filter(e => e.type === 'note');
   const waters = c.entries.filter(e => e.type === 'water');
   const latest = tList[0] || null;
   const peakEntry = tList.length ? tList.reduce((a, b) => (b.tempC > a.tempC ? b : a), tList[0]) : null;
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
   const wetCount = waters.filter(w => w.wet).length;
   const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
-  const waterPct = Math.min(100, Math.round((waterMl / targetMl) * 100));
+  const waterPct = Math.round((waterMl / targetMl) * 100);
+  const overWater = waterMl > targetMl;
   const showAuthor = isFamilyChild(c);
   const generatedStr = new Date().toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -1338,8 +1402,8 @@ function renderReport() {
           </div>
           <div class="soft-pill rounded-2xl p-3.5">
             <div class="text-xs" style="color: var(--muted);">Fluids Today</div>
-            <div class="text-xl font-bold tabular mt-0.5" style="color: var(--water);">${fmtMl(waterMl)}</div>
-            <div class="text-xs tabular mt-0.5" style="color: var(--muted);">${waterPct}% goal · ${wetCount} wet</div>
+            <div class="text-xl font-bold tabular mt-0.5" style="color: ${overWater ? 'var(--warn)' : 'var(--water)'};">${fmtMl(waterMl)}</div>
+            <div class="text-xs tabular mt-0.5" style="color: ${overWater ? 'var(--warn)' : 'var(--muted)'};">${waterPct}%${overWater ? ' (over norm)' : ' goal'} · ${wetCount} wet</div>
           </div>
         </div>
 
@@ -1377,6 +1441,29 @@ function renderReport() {
         </div>
       </div>` : ''}
 
+      <!-- Skin Covers & Parent Comments -->
+      ${notes.length ? `
+      <div class="glass-card rounded-[28px] p-4 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold" style="color: var(--ink);">Skin Covers &amp; Comments</h3>
+          <span class="text-xs font-semibold tabular" style="color: var(--brand);">${notes.length} logged</span>
+        </div>
+        <div class="divide-y" style="border-color: var(--border);">
+          ${notes.map(n => {
+            const sk = (n.skin && n.skin.length) ? n.skin.join(', ') : '';
+            return `
+            <div class="py-2.5 flex items-start justify-between gap-3 text-xs">
+              <div class="min-w-0 space-y-0.5">
+                ${sk ? `<div class="font-bold" style="color: var(--ink);">Skin: ${esc(sk)}</div>` : ''}
+                ${n.comment ? `<div style="color: var(--muted);">${esc(n.comment)}</div>` : ''}
+                ${showAuthor && n.author ? `<div style="color: var(--muted);">by ${esc(n.author)}</div>` : ''}
+              </div>
+              <span class="font-bold tabular shrink-0" style="color: var(--ink);">${esc(n.time)}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
+
       <!-- Complete Chronological Clinical Log -->
       <div class="glass-card rounded-[28px] p-4 space-y-2.5">
         <div class="flex items-center justify-between">
@@ -1386,16 +1473,20 @@ function renderReport() {
         ${c.entries.length ? `
           <div class="divide-y" style="border-color: var(--border);">
             ${c.entries.map(e => {
-              const isT = e.type === 'temp', isM = e.type === 'med';
-              const dot = isT ? statusOf(e.tempC).hex : isM ? '#7A5AF8' : '#0EA5E9';
-              const label = isT ? 'Temperature' : isM ? esc(e.title) : `${fmtMl(e.ml)} ${esc(e.title || 'Water')}`;
+              const isT = e.type === 'temp', isM = e.type === 'med', isN = e.type === 'note';
+              const dot = isT ? statusOf(e.tempC).hex : isM ? '#7A5AF8' : isN ? 'var(--brand)' : '#0EA5E9';
+              const skStr = isN && e.skin && e.skin.length ? e.skin.join(', ') : '';
+              const label = isT ? 'Temperature' : isM ? esc(e.title) : isN ? (skStr ? `Skin: ${esc(skStr)}` : 'Parent Comment') : `${fmtMl(e.ml)} ${esc(e.title || 'Water')}`;
               const byTag = (showAuthor && e.author) ? ` · by ${esc(e.author)}` : '';
+              const cmtTag = e.comment ? ` · ${esc(e.comment)}` : '';
               const detail = isT
-                ? `${esc(e.note || statusOf(e.tempC).label)}${byTag}`
+                ? `${esc(e.note || statusOf(e.tempC).label)}${cmtTag}${byTag}`
                 : isM
-                  ? `${esc(e.dose || 'Medicine')}${e.note ? ' · ' + esc(e.note) : ''}${byTag}`
-                  : `${e.wet ? 'Wet diaper' : 'Hydration'}${byTag}`;
-              const val = isT ? fmtT(e.tempC).full : isM ? esc(e.dose || 'Given') : `+${fmtMl(e.ml)}`;
+                  ? `${esc(e.dose || 'Medicine')}${e.note ? ' · ' + esc(e.note) : ''}${cmtTag}${byTag}`
+                  : isN
+                    ? `${e.comment ? esc(e.comment) : 'Observation'}${byTag}`
+                    : `${e.wet ? 'Wet diaper' : 'Hydration'}${cmtTag}${byTag}`;
+              const val = isT ? fmtT(e.tempC).full : isM ? esc(e.dose || 'Given') : isN ? (skStr ? 'Skin' : 'Note') : `+${fmtMl(e.ml)}`;
               return `
                 <div class="py-2.5 flex items-center justify-between gap-3 text-xs">
                   <div class="flex items-center gap-2.5 min-w-0">
@@ -1480,25 +1571,36 @@ let syncReconnectTimer = null;
 function waterBudget(c) {
   const goalMl = c ? dailyWaterGoalMl(c.age, c.weightKg) : 1200;
   const todayMl = c ? c.entries.filter(e => e.type === 'water').reduce((s, w) => s + (w.ml || 0), 0) : 0;
-  const remainingMl = Math.max(0, goalMl - todayMl);
-  const maxAddMl = Math.min(500, remainingMl);
-  return { goalMl, todayMl, remainingMl, maxAddMl };
+  const pct = Math.round((todayMl / goalMl) * 100);
+  return { goalMl, todayMl, pct, over: todayMl > goalMl };
 }
 
 function openSheet(name) {
   sheet = name;
+  draft.comment = '';
   if (name === 'temp') {
     const t = temps(child())[0];
     draft.tempC = t ? t.tempC : 37.0;
   }
   if (name === 'med') draft.medName = '';
   if (name === 'water') {
-    const { remainingMl } = waterBudget(child());
-    draft.ml = remainingMl > 0 ? Math.min(draft.ml || 120, remainingMl) : 0;
-    if (remainingMl > 0 && draft.ml <= 0) draft.ml = Math.min(120, remainingMl);
+    if (!draft.ml || draft.ml < 5) draft.ml = 120;
+  }
+  if (name === 'note') {
+    draft.skinSelected = [];
+    draft.skinCustom = '';
   }
   renderSheet();
   document.getElementById('sheetBg').classList.add('open');
+}
+
+function toggleSkinOption(idx) {
+  const opt = SKIN_OPTIONS[idx];
+  if (!opt) return;
+  const i = draft.skinSelected.indexOf(opt);
+  if (i >= 0) draft.skinSelected.splice(i, 1);
+  else draft.skinSelected.push(opt);
+  renderSheet();
 }
 function openDetail(id) { detailId = id; openSheet('detail'); }
 function closeSheet() {
@@ -1538,14 +1640,9 @@ function waterLabelOf(ml) {
 function updateWaterFromPointer(clientX) {
   const cap = document.getElementById('waterCapillary');
   if (!cap) return;
-  const { remainingMl, maxAddMl } = waterBudget(child());
-  if (remainingMl <= 0) return;
-  const minVal = Math.min(10, maxAddMl);
   const r = cap.getBoundingClientRect();
   const ratio = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-  const raw = minVal + ratio * Math.max(0, maxAddMl - minVal);
-  const snapped = maxAddMl >= 10 ? Math.round(raw / 5) * 5 : Math.round(raw);
-  draft.ml = Math.max(minVal, Math.min(maxAddMl, snapped));
+  draft.ml = Math.max(10, Math.min(500, Math.round((10 + ratio * 490) / 5) * 5));
   renderSheet();
 }
 
@@ -1601,6 +1698,10 @@ function renderSheet() {
         </div>
         <div class="text-center text-xs mt-2.5" style="color: var(--muted);">Slide along the thermometer glass to fix temperature</div>
       </div>
+      <label class="soft-pill rounded-2xl px-4 py-2.5 block mb-4">
+        <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+        <input id="tempCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. cold hands, sleepy, after nap..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+      </label>
       <button onclick="saveTemp()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: ${st.hex};">Save ${t.full}</button>`;
   } else if (sheet === 'med') {
     const units = ['ml', 'drops', 'tab', 'tsp'];
@@ -1622,75 +1723,98 @@ function renderSheet() {
           <div class="text-2xl font-bold tabular">${draft.dose} <span class="text-sm font-semibold opacity-75">${draft.medUnit}</span></div>
           <button onclick="draft.dose=+(draft.dose+0.5).toFixed(1); renderSheet();" class="w-11 h-11 rounded-full text-xl font-bold cursor-pointer" style="background: var(--card-solid);">+</button>
         </div>
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+          <input id="medCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. taken after food, prescribed dose..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
       </div>
       <button onclick="saveMed()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: var(--med);">Save Medicine</button>`;
   } else if (sheet === 'water') {
-    const { goalMl, todayMl, remainingMl, maxAddMl } = waterBudget(c);
-    if (remainingMl <= 0) {
-      b.innerHTML = `
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-bold">Log Water</h3>
-          <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+    const { goalMl, todayMl, pct, over } = waterBudget(c);
+    const nextPct = Math.round(((todayMl + draft.ml) / goalMl) * 100);
+    const willExceed = (todayMl + draft.ml) > goalMl;
+    const wFillPct = Math.max(4, Math.min(100, ((Math.min(500, draft.ml) - 10) / 490) * 100));
+    const wLabels = [0, 100, 200, 300, 400, 500];
+    const ozParts = (draft.ml / 29.5735).toFixed(1).split('.');
+    const wReadout = state.unit === 'imperial'
+      ? `<span class="text-[46px] leading-none">${ozParts[0]}</span><span class="text-2xl opacity-80">.${ozParts[1]} oz</span>`
+      : `<span class="text-[46px] leading-none">${Math.round(draft.ml)}</span><span class="text-2xl opacity-80"> ml</span>`;
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold">Log Water</h3>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      ${(over || willExceed) ? `
+        <div class="rounded-2xl px-3.5 py-2.5 mb-3 text-xs font-semibold flex items-center justify-between gap-2" style="background: rgba(217, 119, 6, 0.14); color: var(--warn);">
+          <span>${over ? `Over daily water norm (${pct}% of ${fmtMl(goalMl)})` : `This brings today to ${nextPct}% (over ${fmtMl(goalMl)} norm)`}</span>
+        </div>` : ''}
+      <div class="soft-pill rounded-3xl p-5 mb-3.5">
+        <div class="text-center mb-1">
+          <span class="inline-block px-3 py-1 rounded-full text-xs font-bold" style="background: var(--card-solid); color: var(--water);">${waterLabelOf(draft.ml)}</span>
         </div>
-        <div class="soft-pill rounded-3xl p-6 text-center space-y-2 mb-5">
-          <span class="inline-block px-3 py-1 rounded-full text-xs font-bold" style="background: var(--card-solid); color: var(--water);">100% Daily Goal Reached</span>
-          <div class="text-[40px] font-bold tabular leading-tight pt-1" style="color: var(--ink);">${fmtMl(todayMl)}</div>
-          <div class="text-xs tabular" style="color: var(--muted);">Reached ${fmtMl(goalMl)} daily limit (${c ? c.age : 4} yr). Delete an entry in Today to adjust.</div>
+        <div class="flex items-center justify-between gap-2 mb-5">
+          <button onclick="draft.ml=Math.max(5,draft.ml-10); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">−</button>
+          <div class="tabular font-bold">${wReadout}</div>
+          <button onclick="draft.ml=Math.min(1000,draft.ml+10); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">+</button>
         </div>
-        <button onclick="closeSheet()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0EA5E9;">Done</button>`;
-    } else {
-      draft.ml = Math.max(Math.min(5, remainingMl), Math.min(remainingMl, draft.ml || Math.min(120, remainingMl)));
-      const minVal = Math.min(10, maxAddMl);
-      const span = Math.max(1, maxAddMl - minVal);
-      const wFillPct = Math.max(4, Math.min(100, ((Math.min(maxAddMl, draft.ml) - minVal) / span) * 100));
-      const wLabels = [0, 0.2, 0.4, 0.6, 0.8, 1].map(f => Math.round((maxAddMl * f) / 5) * 5);
-      const ozParts = (draft.ml / 29.5735).toFixed(1).split('.');
-      const wReadout = state.unit === 'imperial'
-        ? `<span class="text-[46px] leading-none">${ozParts[0]}</span><span class="text-2xl opacity-80">.${ozParts[1]} oz</span>`
-        : `<span class="text-[46px] leading-none">${Math.round(draft.ml)}</span><span class="text-2xl opacity-80"> ml</span>`;
-      b.innerHTML = `
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-bold">Log Water</h3>
-          <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
-        </div>
-        <div class="soft-pill rounded-3xl p-5 mb-4">
-          <div class="text-center mb-1">
-            <span class="inline-block px-3 py-1 rounded-full text-xs font-bold" style="background: var(--card-solid); color: var(--water);">${waterLabelOf(draft.ml)}</span>
+        <div class="thermo-body" onpointerdown="startWaterDrag(event)">
+          <div class="thermo-bulb flex items-center justify-center text-white" style="background: linear-gradient(135deg, #38BDF8 0%, #0EA5E9 100%);">
+            <svg class="w-4 h-4 relative z-10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7 6.3 10.6a7 7 0 1 0 11.4 0L12 2.7z"/></svg>
           </div>
-          <div class="flex items-center justify-between gap-2 mb-5">
-            <button onclick="draft.ml=Math.max(${Math.min(5, remainingMl)},draft.ml-10); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">−</button>
-            <div class="tabular font-bold">${wReadout}</div>
-            <button onclick="draft.ml=Math.min(${remainingMl},draft.ml+10); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">+</button>
-          </div>
-          <div class="thermo-body" onpointerdown="startWaterDrag(event)">
-            <div class="thermo-bulb flex items-center justify-center text-white" style="background: linear-gradient(135deg, #38BDF8 0%, #0EA5E9 100%);">
-              <svg class="w-4 h-4 relative z-10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7 6.3 10.6a7 7 0 1 0 11.4 0L12 2.7z"/></svg>
-            </div>
-            <div class="thermo-stem-outer">
-              <div id="waterCapillary" class="thermo-capillary">
-                <div class="thermo-mercury" style="width:${wFillPct.toFixed(1)}%; background:linear-gradient(90deg, #7DD3FC 0%, #0EA5E9 100%); color:#0EA5E9;">
-                  <div class="thermo-knob"></div>
-                </div>
+          <div class="thermo-stem-outer">
+            <div id="waterCapillary" class="thermo-capillary">
+              <div class="thermo-mercury" style="width:${wFillPct.toFixed(1)}%; background:linear-gradient(90deg, #7DD3FC 0%, #0EA5E9 100%); color:#0EA5E9;">
+                <div class="thermo-knob"></div>
               </div>
-              <div class="thermo-sheen"></div>
             </div>
+            <div class="thermo-sheen"></div>
           </div>
-          <div class="pl-11 pr-2 mt-2">
-            <div class="flex justify-between items-start h-2.5 mb-0.5">
-              ${Array.from({length: 21}).map((_, i) => `<span style="width:1.5px; height:${i%4===0?'10px':'5px'}; background:var(--muted); opacity:${i%4===0?0.65:0.30}; border-radius:2px;"></span>`).join('')}
-            </div>
-            <div class="flex justify-between text-xs tabular" style="color: var(--muted);">
-              ${wLabels.map(v => `<span>${state.unit==='imperial' ? Math.round(v/29.5735) + 'oz' : v}</span>`).join('')}
-            </div>
-          </div>
-          <div class="text-center text-xs mt-2.5 tabular" style="color: var(--muted);">Today: ${fmtMl(todayMl)} / ${fmtMl(goalMl)} · ${fmtMl(remainingMl)} left (100% max)</div>
         </div>
-        <button onclick="draft.wet=!draft.wet; renderSheet();" class="w-full soft-pill rounded-2xl px-4 py-3.5 flex items-center justify-between mb-5 cursor-pointer">
-          <span class="text-xs font-bold">Also had a wet diaper</span>
-          <span class="text-xs font-bold" style="color: var(--water);">${draft.wet ? '✓ Yes' : 'No'}</span>
-        </button>
-        <button onclick="saveWater()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0EA5E9;">Add +${fmtMl(draft.ml)}</button>`;
-    }
+        <div class="pl-11 pr-2 mt-2">
+          <div class="flex justify-between items-start h-2.5 mb-0.5">
+            ${Array.from({length: 21}).map((_, i) => `<span style="width:1.5px; height:${i%4===0?'10px':'5px'}; background:var(--muted); opacity:${i%4===0?0.65:0.30}; border-radius:2px;"></span>`).join('')}
+          </div>
+          <div class="flex justify-between text-xs tabular" style="color: var(--muted);">
+            ${wLabels.map(v => `<span>${state.unit==='imperial' ? Math.round(v/29.5735) + 'oz' : v}</span>`).join('')}
+          </div>
+        </div>
+        <div class="text-center text-xs mt-2.5 tabular" style="color: var(--muted);">Today: ${fmtMl(todayMl)} / ${fmtMl(goalMl)} (${pct}% of ${c ? c.age : 4} yr norm)</div>
+      </div>
+      <button onclick="draft.wet=!draft.wet; renderSheet();" class="w-full soft-pill rounded-2xl px-4 py-3 flex items-center justify-between mb-3 cursor-pointer">
+        <span class="text-xs font-bold">Also had a wet diaper</span>
+        <span class="text-xs font-bold" style="color: var(--water);">${draft.wet ? '✓ Yes' : 'No'}</span>
+      </button>
+      <label class="soft-pill rounded-2xl px-4 py-2.5 block mb-4">
+        <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+        <input id="waterCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. electrolyte solution, warm tea, soup..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+      </label>
+      <button onclick="saveWater()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0EA5E9;">Add +${fmtMl(draft.ml)}</button>`;
+  } else if (sheet === 'note') {
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold">Skin Covers &amp; Comment</h3>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      <div class="space-y-3.5 mb-5">
+        <div>
+          <div class="text-xs font-semibold mb-2" style="color: var(--muted);">Skin covers (choose one or more)</div>
+          <div class="flex flex-wrap gap-2">
+            ${SKIN_OPTIONS.map((opt, idx) => {
+              const sel = draft.skinSelected.includes(opt);
+              return `<button onclick="toggleSkinOption(${idx})" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer transition" style="background:${sel?'var(--brand)':'var(--soft)'}; color:${sel?'#FFF':'var(--ink)'};">${esc(opt)}</button>`;
+            }).join('')}
+          </div>
+        </div>
+        <label class="soft-pill rounded-2xl px-4 py-3 block">
+          <span class="text-xs font-medium block mb-1" style="color: var(--muted);">Write skin observation (optional)</span>
+          <input id="skinCustomInput" type="text" value="${esc(draft.skinCustom)}" oninput="draft.skinCustom=this.value" placeholder="e.g. small pink spots on belly, fades when pressed..." class="w-full bg-transparent text-sm font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+        <label class="soft-pill rounded-2xl px-4 py-3 block">
+          <span class="text-xs font-medium block mb-1" style="color: var(--muted);">Comment (optional)</span>
+          <textarea id="noteCommentInput" rows="3" oninput="draft.comment=this.value" placeholder="Write any comment (sleep, appetite, cough, mood, doctor advice...)" class="w-full bg-transparent text-sm font-semibold outline-none resize-none" style="color: var(--ink);">${esc(draft.comment)}</textarea>
+        </label>
+      </div>
+      <button onclick="saveNote()" class="w-full py-3.5 rounded-full text-sm font-bold cursor-pointer" style="background: var(--cta-bg); color: var(--cta-ink);">Save Skin &amp; Comment</button>`;
   } else if (sheet === 'themes') {
     b.innerHTML = `
       <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Choose Color Theme</h3><button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Done</button></div>
@@ -1751,6 +1875,8 @@ function renderSheet() {
         ${e.type === 'temp' ? `<div class="flex justify-between"><span style="color: var(--muted);">Reading</span><span class="font-bold tabular">${fmtT(e.tempC).full} (${esc(e.note)})</span></div>` : ''}
         ${e.type === 'med' ? `<div class="flex justify-between"><span style="color: var(--muted);">Medicine</span><span class="font-bold">${esc(e.title)}${e.dose ? ' · ' + esc(e.dose) : ''}</span></div>` : ''}
         ${e.type === 'water' ? `<div class="flex justify-between"><span style="color: var(--muted);">Water</span><span class="font-bold tabular">+${fmtMl(e.ml)}${e.wet ? ' · Wet diaper' : ''}</span></div>` : ''}
+        ${e.type === 'note' && e.skin && e.skin.length ? `<div class="flex justify-between gap-3"><span style="color: var(--muted);">Skin covers</span><span class="font-bold text-right">${esc(e.skin.join(', '))}</span></div>` : ''}
+        ${e.comment ? `<div class="pt-1 border-t" style="border-color: var(--border);"><div class="mb-0.5" style="color: var(--muted);">Comment</div><div class="font-semibold leading-relaxed" style="color: var(--ink);">${esc(e.comment)}</div></div>` : ''}
       </div>
       <button onclick="deleteEntry('${esc(e.id)}')" class="w-full py-3.5 rounded-full text-sm font-bold cursor-pointer" style="background: rgba(220,62,85,0.14); color: var(--danger);">Delete Entry</button>`;
   }
@@ -1980,9 +2106,10 @@ function encodeSharePayload(c) {
     fc: c.familyCode || state.familyCode,
     r: (c.reminders || []).slice(0, 30).map(x => [x.id, x.text, x.when, x.done ? 1 : 0]),
     e: (c.entries || []).slice(0, 40).map(x =>
-      x.type === 'temp' ? ['t', x.id, x.tempC, x.time, x.note || '', x.createdAtMs || 0]
-      : x.type === 'med' ? ['m', x.id, x.title, x.dose || '', x.time, x.note || '', x.createdAtMs || 0]
-      : ['w', x.id, x.ml || 0, x.wet ? 1 : 0, x.time, x.createdAtMs || 0]
+      x.type === 'temp' ? ['t', x.id, x.tempC, x.time, x.note || '', x.createdAtMs || 0, x.comment || '']
+      : x.type === 'med' ? ['m', x.id, x.title, x.dose || '', x.time, x.note || '', x.createdAtMs || 0, x.comment || '']
+      : x.type === 'note' ? ['n', x.id, x.skin || [], x.comment || '', x.time, x.createdAtMs || 0]
+      : ['w', x.id, x.ml || 0, x.wet ? 1 : 0, x.time, x.createdAtMs || 0, x.comment || '']
     )
   };
   const bytes = new TextEncoder().encode(JSON.stringify(mini));
@@ -2014,9 +2141,10 @@ function decodeSharePayload(raw) {
     familyMembers: [],
     reminders: (mini.r || []).map(x => ({ id: x[0], text: x[1], when: x[2] || 'Today', done: !!x[3] })),
     entries: (mini.e || []).map(x => {
-      if (x[0] === 't') return { id: x[1], type: 'temp', tempC: Number(x[2]), time: x[3], note: x[4], createdAtMs: Number(x[5]) || 0 };
-      if (x[0] === 'm') return { id: x[1], type: 'med', title: x[2], dose: x[3], time: x[4], note: x[5], createdAtMs: Number(x[6]) || 0 };
-      return { id: x[1], type: 'water', title: 'Water', ml: Number(x[2]) || 0, wet: !!x[3], time: x[4], createdAtMs: Number(x[5]) || 0 };
+      if (x[0] === 't') return { id: x[1], type: 'temp', tempC: Number(x[2]), time: x[3], note: x[4], createdAtMs: Number(x[5]) || 0, comment: x[6] || '' };
+      if (x[0] === 'm') return { id: x[1], type: 'med', title: x[2], dose: x[3], time: x[4], note: x[5], createdAtMs: Number(x[6]) || 0, comment: x[7] || '' };
+      if (x[0] === 'n') return { id: x[1], type: 'note', skin: Array.isArray(x[2]) ? x[2] : [], comment: x[3] || '', time: x[4], createdAtMs: Number(x[5]) || 0 };
+      return { id: x[1], type: 'water', title: 'Water', ml: Number(x[2]) || 0, wet: !!x[3], time: x[4], createdAtMs: Number(x[5]) || 0, comment: x[6] || '' };
     })
   };
 }
@@ -2119,6 +2247,8 @@ async function saveTemp() {
   const hhmm = nowHHMM();
   const note = statusOf(draft.tempC).label;
   const tempVal = draft.tempC;
+  const comment = (document.getElementById('tempCommentInput')?.value ?? draft.comment ?? '').trim();
+  draft.comment = '';
 
   closeSheet();
   state.tab = 'today';
@@ -2126,7 +2256,7 @@ async function saveTemp() {
   if (state.token) {
     try {
       const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
-        type: 'temp', temp: tempVal, time: hhmm, note, createdAtMs: nowMs
+        type: 'temp', temp: tempVal, time: hhmm, note, comment, createdAtMs: nowMs
       });
       if (r.ok && r.data) {
         c.entries.unshift(normalizeServerEntry(r.data));
@@ -2136,7 +2266,7 @@ async function saveTemp() {
     } catch {}
   }
 
-  c.entries.unshift({ id: 't' + nowMs, type: 'temp', tempC: tempVal, time: hhmm, note, author: state.userName || 'Parent', createdAtMs: nowMs });
+  c.entries.unshift({ id: 't' + nowMs, type: 'temp', tempC: tempVal, time: hhmm, note, comment, author: state.userName || 'Parent', createdAtMs: nowMs });
   persist(); render(); toast(`Saved ${fmtT(tempVal).full}`);
 }
 
@@ -2149,13 +2279,15 @@ async function saveMed() {
   const nowMs = Date.now();
   const hhmm = nowHHMM();
   const doseStr = `${draft.dose} ${draft.medUnit}`;
+  const comment = (document.getElementById('medCommentInput')?.value ?? draft.comment ?? '').trim();
   draft.medName = '';
+  draft.comment = '';
   closeSheet();
 
   if (state.token) {
     try {
       const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
-        type: 'med', title: name, dose: doseStr, med: `${name} ${doseStr}`, time: hhmm, note: '', createdAtMs: nowMs
+        type: 'med', title: name, dose: doseStr, med: `${name} ${doseStr}`, time: hhmm, note: '', comment, createdAtMs: nowMs
       });
       if (r.ok && r.data) {
         c.entries.unshift(normalizeServerEntry(r.data));
@@ -2165,45 +2297,79 @@ async function saveMed() {
     } catch {}
   }
 
-  c.entries.unshift({ id: 'm' + nowMs, type: 'med', title: name, dose: doseStr, time: hhmm, note: '', author: state.userName || 'Parent', createdAtMs: nowMs });
+  c.entries.unshift({ id: 'm' + nowMs, type: 'med', title: name, dose: doseStr, time: hhmm, note: '', comment, author: state.userName || 'Parent', createdAtMs: nowMs });
   persist(); render(); toast(`Logged ${name}`);
 }
 
 async function saveWater() {
   const c = child();
   if (!c) return;
-  const { goalMl, remainingMl } = waterBudget(c);
-  if (remainingMl <= 0) {
-    closeSheet();
-    toast(`Daily water limit (100% · ${fmtMl(goalMl)}) reached`);
-    return;
-  }
+  const { goalMl, todayMl } = waterBudget(c);
   const nowMs = Date.now();
   const hhmm = nowHHMM();
-  const mlVal = Math.max(1, Math.min(draft.ml, remainingMl));
+  const mlVal = Math.max(1, Number(draft.ml) || 0);
   const wetVal = draft.wet;
+  const comment = (document.getElementById('waterCommentInput')?.value ?? draft.comment ?? '').trim();
+  draft.comment = '';
   closeSheet();
+
+  const newTotal = todayMl + mlVal;
+  const newPct = Math.round((newTotal / goalMl) * 100);
+  const doneMsg = newTotal > goalMl
+    ? `Added +${fmtMl(mlVal)} · Over daily water norm (${newPct}%)`
+    : `Added +${fmtMl(mlVal)}`;
 
   if (state.token) {
     try {
       const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
-        type: 'water', title: 'Water', ml: mlVal, wet: wetVal, drink: `Water ${mlVal} ml`, time: hhmm, note: wetVal ? 'Wet diaper' : 'Hydration', createdAtMs: nowMs
+        type: 'water', title: 'Water', ml: mlVal, wet: wetVal, drink: `Water ${mlVal} ml`, time: hhmm, note: wetVal ? 'Wet diaper' : 'Hydration', comment, createdAtMs: nowMs
       });
       if (r.ok && r.data) {
         c.entries.unshift(normalizeServerEntry(r.data));
-        persist(); render(); toast(`Added +${fmtMl(r.data.ml || mlVal)}`);
-        return;
-      }
-      if (r.isApiJson && !r.ok) {
-        toast(r.message || 'Daily water limit (100%) reached');
-        syncFromServer({ force: true });
+        persist(); render(); toast(doneMsg);
         return;
       }
     } catch {}
   }
 
-  c.entries.unshift({ id: 'w' + nowMs, type: 'water', title: 'Water', ml: mlVal, wet: wetVal, time: hhmm, author: state.userName || 'Parent', createdAtMs: nowMs });
-  persist(); render(); toast(`Added +${fmtMl(mlVal)}`);
+  c.entries.unshift({ id: 'w' + nowMs, type: 'water', title: 'Water', ml: mlVal, wet: wetVal, time: hhmm, comment, author: state.userName || 'Parent', createdAtMs: nowMs });
+  persist(); render(); toast(doneMsg);
+}
+
+async function saveNote() {
+  const c = child();
+  if (!c) return;
+  const customSkin = (document.getElementById('skinCustomInput')?.value ?? draft.skinCustom ?? '').trim();
+  const comment = (document.getElementById('noteCommentInput')?.value ?? draft.comment ?? '').trim();
+  const skin = [...draft.skinSelected];
+  if (customSkin && !skin.includes(customSkin)) skin.push(customSkin);
+
+  if (!skin.length && !comment) {
+    return toast('Pick a skin cover choice or write a comment first');
+  }
+
+  const nowMs = Date.now();
+  const hhmm = nowHHMM();
+  draft.skinSelected = [];
+  draft.skinCustom = '';
+  draft.comment = '';
+  closeSheet();
+
+  if (state.token) {
+    try {
+      const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
+        type: 'note', skin, comment, time: hhmm, note: 'Observation', createdAtMs: nowMs
+      });
+      if (r.ok && r.data) {
+        c.entries.unshift(normalizeServerEntry(r.data));
+        persist(); render(); toast('Saved skin & comment');
+        return;
+      }
+    } catch {}
+  }
+
+  c.entries.unshift({ id: 'n' + nowMs, type: 'note', skin, comment, time: hhmm, note: 'Observation', author: state.userName || 'Parent', createdAtMs: nowMs });
+  persist(); render(); toast('Saved skin & comment');
 }
 
 async function deleteEntry(id) {
@@ -2231,10 +2397,12 @@ async function undoDelete() {
   if (state.token) {
     try {
       const payload = entry.type === 'temp'
-        ? { type: 'temp', temp: entry.tempC, time: entry.time, note: entry.note, createdAtMs: entry.createdAtMs || Date.now() }
+        ? { type: 'temp', temp: entry.tempC, time: entry.time, note: entry.note, comment: entry.comment || '', createdAtMs: entry.createdAtMs || Date.now() }
         : entry.type === 'med'
-          ? { type: 'med', title: entry.title, dose: entry.dose, med: `${entry.title} ${entry.dose}`, time: entry.time, note: entry.note, createdAtMs: entry.createdAtMs || Date.now() }
-          : { type: 'water', title: 'Water', ml: entry.ml, wet: entry.wet, drink: `Water ${entry.ml} ml`, time: entry.time, createdAtMs: entry.createdAtMs || Date.now() };
+          ? { type: 'med', title: entry.title, dose: entry.dose, med: `${entry.title} ${entry.dose}`, time: entry.time, note: entry.note, comment: entry.comment || '', createdAtMs: entry.createdAtMs || Date.now() }
+          : entry.type === 'note'
+            ? { type: 'note', skin: entry.skin || [], comment: entry.comment || '', time: entry.time, note: 'Observation', createdAtMs: entry.createdAtMs || Date.now() }
+            : { type: 'water', title: 'Water', ml: entry.ml, wet: entry.wet, drink: `Water ${entry.ml} ml`, time: entry.time, comment: entry.comment || '', createdAtMs: entry.createdAtMs || Date.now() };
       const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, payload);
       if (r.ok && r.data) {
         c.entries.splice(idx, 0, normalizeServerEntry(r.data));

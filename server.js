@@ -513,27 +513,23 @@ const server = http.createServer(async (req, res) => {
 
                 const body = await parseJsonBody(req);
                 const nowMs = body.createdAtMs || Date.now();
-                const entryType = ['temp', 'med', 'water'].includes(body.type)
+                const entryType = ['temp', 'med', 'water', 'note'].includes(body.type)
                     ? body.type
-                    : (body.med ? 'med' : (body.drink || body.ml ? 'water' : 'temp'));
+                    : (body.med ? 'med' : (body.drink || body.ml ? 'water' : (body.skin || body.comment ? 'note' : 'temp')));
 
                 const parsedTemp = body.temp !== undefined && body.temp !== null ? parseFloat(body.temp) : NaN;
                 const tempVal = entryType === 'temp' ? (Number.isNaN(parsedTemp) ? 37.0 : parsedTemp) : null;
 
                 child.points48h = Array.isArray(child.points48h) ? child.points48h : [];
 
-                let finalMl = body.ml !== undefined && body.ml !== null ? Number(body.ml) : null;
-                if (entryType === 'water') {
-                    const goalMl = dailyWaterGoalMl(child.age, child.weight);
-                    const currentMl = child.points48h
-                        .filter(p => p.type === 'water' || (!p.type && (p.drink || p.ml)))
-                        .reduce((s, p) => s + (Number(p.ml) || 0), 0);
-                    const remainingMl = Math.max(0, goalMl - currentMl);
-                    if (remainingMl <= 0) {
-                        return sendJson(res, 400, { success: false, message: 'Daily water goal (100%) already reached' });
-                    }
-                    finalMl = Math.max(1, Math.min(Number(finalMl) || 0, remainingMl));
-                }
+                const finalMl = entryType === 'water'
+                    ? Math.max(1, Number(body.ml) || 0)
+                    : (body.ml !== undefined && body.ml !== null ? Number(body.ml) : null);
+
+                const skinList = Array.isArray(body.skin)
+                    ? body.skin.map(s => String(s || '').trim()).filter(Boolean).slice(0, 12)
+                    : (body.skin ? [String(body.skin).trim()].filter(Boolean) : []);
+                const commentStr = body.comment ? String(body.comment).trim().slice(0, 600) : '';
 
                 child.points48h.forEach(p => {
                     if (p.createdAtMs) p.hours_ago = +((nowMs - p.createdAtMs) / 3600000).toFixed(2);
@@ -548,9 +544,11 @@ const server = http.createServer(async (req, res) => {
                     dose: body.dose ? String(body.dose).trim() : null,
                     ml: finalMl,
                     wet: !!body.wet,
+                    skin: skinList,
+                    comment: commentStr,
                     drink: entryType === 'water' ? `Water ${finalMl} ml` : (body.drink ? String(body.drink).trim() : null),
                     med: body.med ? String(body.med).trim() : null,
-                    note: (body.note || (entryType === 'temp' ? 'Reading' : entryType === 'med' ? 'Medicine' : 'Hydration')).trim(),
+                    note: (body.note || (entryType === 'temp' ? 'Reading' : entryType === 'med' ? '' : entryType === 'note' ? 'Observation' : 'Hydration')).trim(),
                     time: body.time ? String(body.time).trim() : null,
                     author: activeUser.name || 'Parent',
                     hours_ago: 0,
