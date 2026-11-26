@@ -1,8 +1,8 @@
-const CACHE_NAME = 'nestnote-pwa-v1.0';
+const CACHE_NAME = 'nestnote-pwa-v1.1';
 const CORE_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/icon.svg'
+  './',
+  './manifest.json',
+  './icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -32,6 +32,6 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});
         return res;
       })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match('/')))
+      .catch(() => caches.match(req).then((cached) => cached || caches.match('./')))
   );
 });

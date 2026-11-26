@@ -1,0 +1,15 @@
+{
+  "name": "NestNote — Family Fever & Care Diary",
+  "short_name": "NestNote",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#EEF3FC",
+  "theme_color": "#3563E9",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

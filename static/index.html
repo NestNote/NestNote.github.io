@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" id="metaThemeColor" content="#EEF3FC" />
   <meta name="description" content="NestNote — Calm family fever, medicine &amp; hydration diary." />
-  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="manifest" href="./manifest.json" />
   <title>NestNote — Family Fever &amp; Care Diary</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -381,6 +381,7 @@
 
 <script>
 const STORAGE_KEY = 'nestnote_state_v2';
+const ACCOUNTS_KEY = 'nestnote_accounts_v1';
 
 const THEMES = [
   { id: 'cerulean', name: 'Cerulean Silk', desc: 'Cornflower & sky', dark: false, accent: '#3563E9', metaBg: '#EEF3FC', swatch: 'linear-gradient(135deg,#2A52C8,#89B2FF)' },
@@ -407,6 +408,7 @@ const defaultState = {
   signedIn: false,
   isGuest: false,
   token: '',
+  localUser: '',
   authMode: 'signin',
   theme: 'cerulean',
   unit: 'metric',
@@ -440,10 +442,88 @@ function loadState() {
 const state = loadState();
 let lastDeleted = null;
 
+function loadLocalAccounts() {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalAccounts(accounts) {
+  try {
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  } catch {}
+}
+
+async function hashLocalPassword(pass) {
+  const input = 'nestnote_local_v1:' + String(pass || '');
+  try {
+    if (window.crypto && crypto.subtle) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {}
+  let h1 = 0x811c9dc5, h2 = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    const c = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619);
+    h2 = Math.imul(h2 ^ (c + i), 2246822519);
+  }
+  return 'fb_' + (h1 >>> 0).toString(16) + '_' + (h2 >>> 0).toString(16);
+}
+
+async function localRegister({ name, username, password }) {
+  const u = username.trim().toLowerCase();
+  const accounts = loadLocalAccounts();
+  if (accounts[u]) {
+    return { ok: false, message: 'An account with this email or username already exists. Try Sign In.' };
+  }
+  const passHash = await hashLocalPassword(password);
+  const acc = {
+    id: 'lu_' + Date.now(),
+    username: u,
+    name: name.trim(),
+    passHash,
+    theme: state.theme,
+    unit: state.unit,
+    alarmOn: state.alarmOn,
+    childId: null,
+    children: [],
+    createdAt: new Date().toISOString()
+  };
+  accounts[u] = acc;
+  saveLocalAccounts(accounts);
+  return { ok: true, user: acc, children: [] };
+}
+
+async function localLogin({ username, password }) {
+  const u = username.trim().toLowerCase();
+  const accounts = loadLocalAccounts();
+  const acc = accounts[u];
+  const passHash = await hashLocalPassword(password);
+  if (!acc || acc.passHash !== passHash) {
+    return { ok: false, message: 'Invalid email/username or password' };
+  }
+  return { ok: true, user: acc, children: Array.isArray(acc.children) ? acc.children : [] };
+}
+
 function persist() {
   try {
     const { view, busy, ...toSave } = state;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    if (state.localUser && !state.token) {
+      const accounts = loadLocalAccounts();
+      if (accounts[state.localUser]) {
+        accounts[state.localUser].children = state.children;
+        accounts[state.localUser].childId = state.childId;
+        accounts[state.localUser].theme = state.theme;
+        accounts[state.localUser].unit = state.unit;
+        accounts[state.localUser].alarmOn = state.alarmOn;
+        saveLocalAccounts(accounts);
+      }
+    }
   } catch {}
 }
 
@@ -459,9 +539,13 @@ async function apiCall(method, url, body) {
   const opts = { method, headers };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  const isApiJson = ct.includes('application/json');
   let json = {};
-  try { json = await res.json(); } catch {}
-  return { ok: res.ok && json.success !== false, status: res.status, data: json.data, message: json.message || '' };
+  if (isApiJson) {
+    try { json = await res.json(); } catch {}
+  }
+  return { ok: isApiJson && res.ok && json.success !== false, status: res.status, isApiJson, data: json.data, message: json.message || '' };
 }
 
 function fmtHHMMFromMs(ms) {
@@ -1120,9 +1204,9 @@ function renderSettings() {
       <div class="glass-card rounded-[28px] p-4 flex items-center justify-between">
         <div>
           <div class="text-sm font-bold">Account</div>
-          <div class="text-xs mt-0.5" style="color: var(--muted);">${esc(state.userName || 'Guest')} · ${state.token ? 'Synced' : 'This device only'}</div>
+          <div class="text-xs mt-0.5" style="color: var(--muted);">${esc(state.userName || 'Guest')} · ${state.token ? 'Cloud synced' : (state.localUser ? 'Saved on this device' : 'Guest on this device')}</div>
         </div>
-        <button onclick="signOut()" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer soft-pill" style="color: var(--brand);">${state.token ? 'Sign Out' : 'Sign In'}</button>
+        <button onclick="signOut()" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer soft-pill" style="color: var(--brand);">${(state.token || state.localUser) ? 'Sign Out' : 'Sign In'}</button>
       </div>
     </div>`;
 }
@@ -1326,6 +1410,38 @@ async function submitAuth() {
 
   state.busy = true;
   render();
+
+  const finishLocalAuth = async () => {
+    const loc = isUp
+      ? await localRegister({ name: authForm.name, username: authForm.user, password: authForm.pass })
+      : await localLogin({ username: authForm.user, password: authForm.pass });
+    if (!loc.ok) {
+      authForm.error = loc.message || (isUp ? 'Could not create account.' : 'Invalid email/username or password');
+      state.busy = false;
+      render();
+      return;
+    }
+    state.token = '';
+    state.localUser = loc.user.username;
+    state.userName = loc.user.name;
+    state.theme = validThemeId(loc.user.theme || state.theme);
+    state.unit = loc.user.unit || state.unit;
+    state.alarmOn = loc.user.alarmOn !== undefined ? loc.user.alarmOn : state.alarmOn;
+    state.children = Array.isArray(loc.children) ? loc.children : [];
+    state.childId = (loc.user.childId && state.children.some(x => x.id === loc.user.childId))
+      ? loc.user.childId
+      : (state.children[0]?.id || null);
+    state.signedIn = true;
+    state.isGuest = false;
+    state.busy = false;
+    authForm.pass = '';
+    authForm.error = '';
+    state.view = state.children.length ? 'app' : 'childSetup';
+    persist();
+    render();
+    toast(state.children.length ? `Welcome back, ${state.userName}` : 'Step 2: Add your child');
+  };
+
   try {
     const endpoint = isUp ? '/api/register' : '/api/login';
     const payload = isUp
@@ -1333,14 +1449,21 @@ async function submitAuth() {
       : { username: authForm.user, password: authForm.pass };
     const r = await apiCall('POST', endpoint, payload);
 
+    // If hosted on a static host (GitHub Pages / Render Static Site) or backend is offline, use local account store seamlessly
+    if (!r.isApiJson) {
+      await finishLocalAuth();
+      return;
+    }
+
     if (!r.ok || !r.data) {
-      authForm.error = r.message || 'Could not sign in. Please check your details.';
+      authForm.error = r.message || (isUp ? 'Could not create account. Please check your details.' : 'Invalid email/username or password.');
       state.busy = false;
       render();
       return;
     }
 
     state.token = r.data.token;
+    state.localUser = '';
     state.userName = r.data.user?.name || authForm.name || authForm.user.split('@')[0];
     state.theme = validThemeId(r.data.user?.theme || state.theme);
     state.children = (r.data.children || []).map(normalizeServerChild);
@@ -1355,14 +1478,13 @@ async function submitAuth() {
     render();
     toast(state.children.length ? `Welcome back, ${state.userName}` : 'Step 2: Add your child');
   } catch {
-    authForm.error = 'Connection error. Please try again.';
-    state.busy = false;
-    render();
+    await finishLocalAuth();
   }
 }
 
 function enterGuest() {
   state.token = '';
+  state.localUser = '';
   state.userName = 'Guest';
   state.isGuest = true;
   state.signedIn = true;
@@ -1376,6 +1498,7 @@ async function signOut() {
     apiCall('POST', '/api/logout').catch(() => {});
   }
   state.token = '';
+  state.localUser = '';
   state.signedIn = false;
   state.isGuest = false;
   state.userName = '';
@@ -1465,7 +1588,9 @@ async function joinPartnerCode(code, fromSetup) {
   }
 
   if (!state.token) {
-    const msg = 'Sign in with a free NestNote account to sync with a partner.';
+    const msg = state.localUser
+      ? 'Partner live sync requires the Render Web Service backend.'
+      : 'Sign in on the Render Web Service to sync with a partner.';
     if (fromSetup) { setupForm.error = msg; render(); }
     else toast(msg);
     return;
@@ -1812,7 +1937,7 @@ async function bootApp() {
     } catch {
       nextView = state.signedIn ? (state.children.length ? 'app' : 'childSetup') : 'auth';
     }
-  } else if (state.isGuest && state.signedIn) {
+  } else if (state.signedIn && (state.isGuest || state.localUser)) {
     nextView = state.children.length ? 'app' : 'childSetup';
   }
 
@@ -1824,7 +1949,7 @@ async function bootApp() {
 }
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
 setInterval(syncFromServer, 20000);
