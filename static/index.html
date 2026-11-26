@@ -1074,17 +1074,17 @@ function renderFamily() {
       <div class="glass-card rounded-[28px] p-4 space-y-3">
         <div class="flex items-center justify-between">
           <div>
-            <div class="text-sm font-bold">Family Code${c ? ` · ${esc(c.name)}` : ''}</div>
-            <div class="text-xs mt-0.5" style="color: var(--muted);">Share with another parent to sync live</div>
+            <div class="text-sm font-bold">Family Share${c ? ` · ${esc(c.name)}` : ''}</div>
+            <div class="text-xs mt-0.5" style="color: var(--muted);">${state.token ? 'Share code with another parent to sync live' : 'Send a private share link to another parent'}</div>
           </div>
-          <span class="px-2.5 py-1 rounded-full text-xs font-semibold" style="background: var(--brand-soft); color: var(--brand);">${memberCount > 1 ? `● ${memberCount} synced` : (state.token ? '● Ready' : 'Local')}</span>
+          <span class="px-2.5 py-1 rounded-full text-xs font-semibold" style="background: var(--brand-soft); color: var(--brand);">${memberCount > 1 ? `● ${memberCount} synced` : '● Ready'}</span>
         </div>
-        <div class="soft-pill rounded-2xl p-3.5 flex items-center justify-between">
-          <div><div class="text-xs" style="color: var(--muted);">Invite Code</div><div class="text-base font-bold tracking-wider tabular">${esc(activeCode)}</div></div>
-          <button onclick="copyFamilyCode()" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer" style="background: var(--card-solid); color: var(--brand);">Copy</button>
+        <div class="soft-pill rounded-2xl p-3.5 flex items-center justify-between gap-2">
+          <div><div class="text-xs" style="color: var(--muted);">Family Code</div><div class="text-base font-bold tracking-wider tabular">${esc(activeCode)}</div></div>
+          <button onclick="copyFamilyCode()" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer shrink-0" style="background: var(--card-solid); color: var(--brand);">${state.token ? 'Copy Code' : 'Copy Share Link'}</button>
         </div>
         <div class="flex items-center gap-2 pt-1">
-          <input id="familyJoinCode" type="text" value="${esc(familyJoinInput)}" oninput="familyJoinInput=this.value" placeholder="Enter partner code (NEST-XXXX)" class="flex-1 min-w-0 soft-pill rounded-full px-3.5 py-2 text-xs font-semibold outline-none" style="color: var(--ink);"/>
+          <input id="familyJoinCode" type="text" value="${esc(familyJoinInput)}" oninput="familyJoinInput=this.value" placeholder="${state.token ? 'Enter partner code (NEST-XXXX)' : 'Paste partner share link or code'}" class="flex-1 min-w-0 soft-pill rounded-full px-3.5 py-2 text-xs font-semibold outline-none" style="color: var(--ink);"/>
           <button onclick="joinPartnerFamily()" class="px-4 py-2 rounded-full text-xs font-bold shrink-0 cursor-pointer" style="background: var(--brand-soft); color: var(--brand);">Join</button>
         </div>
       </div>
@@ -1579,18 +1579,108 @@ async function submitChildSetup() {
   toast(`Welcome to NestNote · ${child().name} added`);
 }
 
+function encodeSharePayload(c) {
+  const mini = {
+    v: 1,
+    n: c.name,
+    a: c.age,
+    w: c.weightKg,
+    al: c.allergies || 'None',
+    dr: c.doctor || '',
+    fc: c.familyCode || state.familyCode,
+    r: (c.reminders || []).slice(0, 30).map(x => [x.id, x.text, x.when, x.done ? 1 : 0]),
+    e: (c.entries || []).slice(0, 40).map(x =>
+      x.type === 'temp' ? ['t', x.id, x.tempC, x.time, x.note || '', x.createdAtMs || 0]
+      : x.type === 'med' ? ['m', x.id, x.title, x.dose || '', x.time, x.note || '', x.createdAtMs || 0]
+      : ['w', x.id, x.ml || 0, x.wet ? 1 : 0, x.time, x.createdAtMs || 0]
+    )
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(mini));
+  let bin = '';
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeSharePayload(raw) {
+  let token = String(raw || '').trim();
+  const hashIdx = token.indexOf('#sync=');
+  if (hashIdx >= 0) token = token.slice(hashIdx + 6);
+  if (token.toUpperCase().startsWith('NESTSYNC:')) token = token.slice(9).trim();
+  token = token.replace(/-/g, '+').replace(/_/g, '/');
+  while (token.length % 4) token += '=';
+  const bin = atob(token);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const mini = JSON.parse(new TextDecoder().decode(bytes));
+  if (!mini || !mini.n) throw new Error('Invalid share link');
+  return {
+    id: 'c_sync_' + (mini.fc || Date.now()),
+    name: String(mini.n),
+    age: Number(mini.a) || 1,
+    weightKg: Number(mini.w) || 10,
+    allergies: mini.al || 'None',
+    doctor: mini.dr || '',
+    familyCode: mini.fc || generateFamilyCode(),
+    familyMembers: [],
+    reminders: (mini.r || []).map(x => ({ id: x[0], text: x[1], when: x[2] || 'Today', done: !!x[3] })),
+    entries: (mini.e || []).map(x => {
+      if (x[0] === 't') return { id: x[1], type: 'temp', tempC: Number(x[2]), time: x[3], note: x[4], createdAtMs: Number(x[5]) || 0 };
+      if (x[0] === 'm') return { id: x[1], type: 'med', title: x[2], dose: x[3], time: x[4], note: x[5], createdAtMs: Number(x[6]) || 0 };
+      return { id: x[1], type: 'water', title: 'Water', ml: Number(x[2]) || 0, wet: !!x[3], time: x[4], createdAtMs: Number(x[5]) || 0 };
+    })
+  };
+}
+
+function mergeImportedChild(imported) {
+  const existing = state.children.find(x => (imported.familyCode && x.familyCode === imported.familyCode) || x.id === imported.id);
+  if (existing) {
+    existing.name = imported.name;
+    existing.age = imported.age;
+    existing.weightKg = imported.weightKg;
+    existing.allergies = imported.allergies;
+    existing.doctor = imported.doctor;
+    const entryMap = new Map();
+    [...existing.entries, ...imported.entries].forEach(e => entryMap.set(e.id, e));
+    existing.entries = Array.from(entryMap.values()).sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+    const remMap = new Map();
+    [...existing.reminders, ...imported.reminders].forEach(r => remMap.set(r.id, r));
+    existing.reminders = Array.from(remMap.values());
+    state.childId = existing.id;
+    return existing;
+  }
+  state.children.unshift(imported);
+  state.childId = imported.id;
+  return imported;
+}
+
 async function joinPartnerCode(code, fromSetup) {
-  const clean = (code || '').trim().toUpperCase();
-  if (!clean) {
-    if (fromSetup) { setupForm.error = "Enter a partner's Family Code to join."; render(); }
-    else toast("Enter a partner's Family Code first");
+  const raw = (code || '').trim();
+  if (!raw) {
+    if (fromSetup) { setupForm.error = "Paste a partner's share link or Family Code to join."; render(); }
+    else toast("Paste a partner's share link or code first");
     return;
   }
 
+  // Support serverless share link / sync code directly on GitHub Pages
+  if (raw.includes('#sync=') || raw.toUpperCase().startsWith('NESTSYNC:') || raw.length > 24) {
+    try {
+      const imported = decodeSharePayload(raw);
+      const merged = mergeImportedChild(imported);
+      setupForm.error = '';
+      setupForm.joinCode = '';
+      familyJoinInput = '';
+      state.view = 'app';
+      state.tab = 'today';
+      persist();
+      render();
+      toast(`Synced ${merged.name}'s diary`);
+      return;
+    } catch {}
+  }
+
+  const clean = raw.toUpperCase();
   if (!state.token) {
-    const msg = state.localUser
-      ? 'Partner live sync requires the Render Web Service backend.'
-      : 'Sign in on the Render Web Service to sync with a partner.';
+    const msg = 'On GitHub Pages, paste the full Share Link copied from your partner\'s Family tab.';
     if (fromSetup) { setupForm.error = msg; render(); }
     else toast(msg);
     return;
@@ -1827,6 +1917,11 @@ function copyText(txt, msg) {
 }
 function copyFamilyCode() {
   const c = child();
+  if (!state.token && c) {
+    const shareUrl = `${window.location.origin}${window.location.pathname}#sync=${encodeSharePayload(c)}`;
+    copyText(shareUrl, `Copied share link for ${c.name}`);
+    return;
+  }
   const code = (c && c.familyCode) ? c.familyCode : state.familyCode;
   copyText(code, `Copied ${code}`);
 }
@@ -1942,6 +2037,19 @@ async function bootApp() {
   }
 
   await minSplash;
+  // Auto-import shared diary if opened via a partner #sync= link
+  if (window.location.hash && window.location.hash.startsWith('#sync=')) {
+    try {
+      const imported = decodeSharePayload(window.location.hash);
+      const merged = mergeImportedChild(imported);
+      state.signedIn = true;
+      if (!state.token && !state.localUser) { state.isGuest = true; state.userName = state.userName || 'Parent'; }
+      nextView = 'app';
+      persist();
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      setTimeout(() => toast(`Imported ${merged.name}'s diary`), 200);
+    } catch {}
+  }
   if (state.view === 'loading') {
     state.view = nextView;
     render();
