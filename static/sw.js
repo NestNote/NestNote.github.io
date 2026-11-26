@@ -1,7 +1,8 @@
-const CACHE_NAME = 'chrono-pwa-v3.2';
+const CACHE_NAME = 'nestnote-pwa-v1.0';
 const CORE_ASSETS = [
   '/',
-  '/manifest.json'
+  '/manifest.json',
+  '/icon.svg'
 ];
 
 self.addEventListener('install', (event) => {

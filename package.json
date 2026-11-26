@@ -1,15 +1,16 @@
 {
-  "name": "chrono",
-  "version": "1.0.0",
-  "description": "Chrono — Clinical Illness Diary & Doctor Report",
+  "name": "nestnote",
+  "version": "2.0.0",
+  "description": "NestNote — Calm Family Fever, Medicine & Hydration Diary",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "build": "echo 'Build OK'"
   },
   "keywords": [
-    "chrono",
-    "healthcare",
+    "nestnote",
+    "family",
+    "fever",
     "diary",
     "pediatrics"
   ],

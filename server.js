@@ -1,7 +1,7 @@
 /**
- * Chrono — Render & Local Web Server
- * Zero external dependencies: pure Node.js built-in modules (http, fs, path, crypto)
- * Supports Family Multi-Access (Mom + Dad) & Real-time Sync
+ * NestNote — Render & Local Web Server
+ * Zero external dependencies: pure Node.js built-in modules (http, fs, path, crypto, zlib)
+ * Supports Family Multi-Access (Co-Parents) & Real-time Sync
  */
 
 const http = require('http');
@@ -11,10 +11,9 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 
 const PORT = process.env.PORT || 3000;
-const DB_FILE = path.join(__dirname, 'chrono_data.json');
+const DB_FILE = path.join(__dirname, 'nestnote_data.json');
+const LEGACY_DB_FILE = path.join(__dirname, 'chrono_data.json');
 const SALT = 'chrono_clinical_salt_2026';
-
-
 
 // -------------------------------------------------------------
 // DATA STORE (CLEAN DATABASE WITHOUT SAMPLE DATA)
@@ -33,10 +32,14 @@ function hashPassword(pass) {
 
 function loadDatabase() {
     try {
-        if (fs.existsSync(DB_FILE)) {
-            const raw = fs.readFileSync(DB_FILE, 'utf-8');
+        const sourceFile = fs.existsSync(DB_FILE)
+            ? DB_FILE
+            : (fs.existsSync(LEGACY_DB_FILE) ? LEGACY_DB_FILE : null);
+        if (sourceFile) {
+            const raw = fs.readFileSync(sourceFile, 'utf-8');
             db = JSON.parse(raw);
-            console.log('📂 Database loaded from', DB_FILE);
+            console.log('Database loaded from', sourceFile);
+            if (sourceFile !== DB_FILE) saveDatabase();
             return;
         }
     } catch (e) {
@@ -51,7 +54,7 @@ function loadDatabase() {
         childrenByUser: {}
     };
     saveDatabase();
-    console.log('✨ Initialized clean database without sample data');
+    console.log('Initialized clean NestNote database without sample data');
 }
 
 function saveDatabase() {
@@ -65,7 +68,7 @@ function saveDatabase() {
 loadDatabase();
 
 // -------------------------------------------------------------
-// ACCESS CHECK FOR CHILD PROFILE (PARENT 1 AND PARENT 2)
+// ACCESS CHECK FOR CHILD PROFILE (CO-PARENTS)
 // -------------------------------------------------------------
 function hasChildAccess(child, userId) {
     if (!child || !userId) return false;
@@ -78,7 +81,7 @@ function hasChildAccess(child, userId) {
 
 function generateFamilyCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = 'FAM-';
+    let code = 'NEST-';
     for (let i = 0; i < 4; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -146,7 +149,7 @@ const server = http.createServer(async (req, res) => {
 
     // Health check endpoint (for Render monitoring)
     if (pathname === '/api/health' || pathname === '/healthz') {
-        return sendJson(res, 200, { status: 'ok', service: 'chrono', uptime: process.uptime() });
+        return sendJson(res, 200, { status: 'ok', service: 'nestnote', uptime: process.uptime() });
     }
 
     // ---------------- API ROUTES ----------------
@@ -163,21 +166,25 @@ const server = http.createServer(async (req, res) => {
                     return sendJson(res, 400, { success: false, message: 'Please fill in all fields' });
                 }
 
-                if (db.usersByUsername[username]) {
-                    return sendJson(res, 409, { success: false, message: 'An account with this username already exists' });
+                if (password.length < 6) {
+                    return sendJson(res, 400, { success: false, message: 'Password must be at least 6 characters' });
                 }
 
-                const userId = 'u_' + Date.now();
+                if (db.usersByUsername[username]) {
+                    return sendJson(res, 409, { success: false, message: 'An account with this email or username already exists' });
+                }
+
+                const userId = 'u_' + Date.now() + '_' + crypto.randomBytes(2).toString('hex');
                 const user = {
                     id: userId,
                     username,
                     name,
                     passwordHash: hashPassword(password),
-                    theme: 'dark',
+                    theme: 'cerulean',
                     createdAt: new Date().toISOString()
                 };
 
-                const token = 'ps_' + crypto.randomBytes(16).toString('hex');
+                const token = 'nn_' + crypto.randomBytes(20).toString('hex');
                 db.users[userId] = user;
                 db.usersByUsername[username] = userId;
                 db.sessions[token] = userId;
@@ -199,17 +206,21 @@ const server = http.createServer(async (req, res) => {
                 const username = (body.username || '').trim().toLowerCase();
                 const password = body.password || '';
 
+                if (!username || !password) {
+                    return sendJson(res, 400, { success: false, message: 'Please enter both username and password' });
+                }
+
                 const userId = db.usersByUsername[username];
                 if (!userId || !db.users[userId]) {
-                    return sendJson(res, 401, { success: false, message: 'Invalid username or password' });
+                    return sendJson(res, 401, { success: false, message: 'Invalid email/username or password' });
                 }
 
                 const user = db.users[userId];
                 if (user.passwordHash !== hashPassword(password)) {
-                    return sendJson(res, 401, { success: false, message: 'Invalid username or password' });
+                    return sendJson(res, 401, { success: false, message: 'Invalid email/username or password' });
                 }
 
-                const token = 'ps_' + crypto.randomBytes(16).toString('hex');
+                const token = 'nn_' + crypto.randomBytes(20).toString('hex');
                 db.sessions[token] = userId;
                 saveDatabase();
 
@@ -258,7 +269,7 @@ const server = http.createServer(async (req, res) => {
             // PUT /api/user/theme
             if (pathname === '/api/user/theme' && method === 'PUT') {
                 const body = await parseJsonBody(req);
-                const theme = body.theme || 'dark';
+                const theme = body.theme || 'cerulean';
                 if (db.users[authUserId]) {
                     db.users[authUserId].theme = theme;
                     saveDatabase();
@@ -270,27 +281,32 @@ const server = http.createServer(async (req, res) => {
             if (pathname === '/api/children' && method === 'POST') {
                 const body = await parseJsonBody(req);
                 const name = (body.name || '').trim();
-                if (!name) return sendJson(res, 400, { success: false, message: 'Name is required' });
+                const age = parseFloat(body.age);
+                const weight = parseFloat(body.weight);
+
+                if (!name || !(age > 0) || !(weight > 0)) {
+                    return sendJson(res, 400, { success: false, message: 'Child name, age, and weight are required' });
+                }
 
                 const childId = 'c_' + Date.now() + '_' + crypto.randomBytes(2).toString('hex');
                 const requestedCode = String(body.familyCode || '').trim().toUpperCase();
                 const codeInUse = requestedCode && Object.values(db.children).some(c => (c.familyCode || '').toUpperCase() === requestedCode);
-                const familyCode = (/^FAM-[A-Z0-9]{4,8}$/.test(requestedCode) && !codeInUse) ? requestedCode : generateFamilyCode();
+                const familyCode = (/^(NEST|FAM)-[A-Z0-9]{4,8}$/.test(requestedCode) && !codeInUse) ? requestedCode : generateFamilyCode();
 
                 const newChild = {
                     id: childId,
                     userId: authUserId,
-                    familyCode: familyCode,
+                    familyCode,
                     familyMembers: [
                         { userId: authUserId, name: activeUser.name, role: 'Profile creator' }
                     ],
                     name,
-                    age: parseFloat(body.age) || 5,
-                    weight: parseFloat(body.weight) || 18,
-                    height: parseFloat(body.height) || 110,
-                    allergies: (body.allergies || 'None').trim(),
+                    age,
+                    weight,
+                    height: parseFloat(body.height) || 0,
+                    allergies: (body.allergies || 'None').trim() || 'None',
                     doctorPhone: (body.doctorPhone || '').trim(),
-                    episode: (body.episode || 'Observation started').trim(),
+                    episode: (body.episode || 'Active diary').trim(),
                     points48h: Array.isArray(body.points48h) ? body.points48h.slice(-200) : [],
                     reminders: Array.isArray(body.reminders) ? body.reminders.slice(0, 50) : [],
                     savedMeds: Array.isArray(body.savedMeds) ? body.savedMeds.slice(0, 10) : [],
@@ -307,26 +323,28 @@ const server = http.createServer(async (req, res) => {
                 return sendJson(res, 200, { success: true, data: newChild });
             }
 
-            // POST /api/family/join (Family Multi-Access: Mom + Dad)
+            // POST /api/family/join (Family Multi-Access: Co-Parents)
             if (pathname === '/api/family/join' && method === 'POST') {
                 const body = await parseJsonBody(req);
-                let inputCode = (body.code || '').trim().toUpperCase().replace(/\s+/g, '');
-                if (/^[A-Z0-9]{4}$/.test(inputCode)) {
-                    inputCode = 'FAM-' + inputCode;
-                }
+                const rawCode = (body.code || '').trim().toUpperCase().replace(/\s+/g, '');
 
-                if (!inputCode) {
+                if (!rawCode) {
                     return sendJson(res, 400, { success: false, message: 'Please enter a family invite code' });
                 }
 
-                // Find child with matching familyCode
-                const matchedChild = Object.values(db.children).find(c => (c.familyCode || '').toUpperCase() === inputCode);
-
-                if (!matchedChild) {
-                    return sendJson(res, 404, { success: false, message: 'Family code not found. Please check the code (e.g. FAM-7X9K)' });
+                const candidates = [rawCode];
+                if (/^[A-Z0-9]{4}$/.test(rawCode)) {
+                    candidates.push('NEST-' + rawCode, 'FAM-' + rawCode);
                 }
 
-                // Grant family access for this child to current user
+                const matchedChild = Object.values(db.children).find(c =>
+                    candidates.includes((c.familyCode || '').toUpperCase())
+                );
+
+                if (!matchedChild) {
+                    return sendJson(res, 404, { success: false, message: 'Family code not found. Please check the code (e.g. NEST-7X9K)' });
+                }
+
                 matchedChild.familyMembers = matchedChild.familyMembers || [];
                 const alreadyMember = matchedChild.familyMembers.some(m => (typeof m === 'string' ? m === authUserId : m.userId === authUserId));
 
@@ -347,7 +365,7 @@ const server = http.createServer(async (req, res) => {
 
                 return sendJson(res, 200, {
                     success: true,
-                    message: `Family access connected! Profile "${matchedChild.name}" is now synced between parents.`,
+                    message: `Family access connected! Profile "${matchedChild.name}" is now synced.`,
                     data: matchedChild
                 });
             }
@@ -369,7 +387,7 @@ const server = http.createServer(async (req, res) => {
                 return sendJson(res, 200, { success: true, message: 'Profile deleted' });
             }
 
-            // POST /api/children/:id/entries (Add temperature measurement with author)
+            // POST /api/children/:id/entries (Add temperature, medicine, or water entry)
             const entryAddMatch = pathname.match(/^\/api\/children\/([^/]+)\/entries$/);
             if (entryAddMatch && method === 'POST') {
                 const childId = entryAddMatch[1];
@@ -379,24 +397,36 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 const body = await parseJsonBody(req);
-                const temp = parseFloat(body.temp) || 37.0;
                 const nowMs = body.createdAtMs || Date.now();
+                const entryType = ['temp', 'med', 'water'].includes(body.type)
+                    ? body.type
+                    : (body.med ? 'med' : (body.drink || body.ml ? 'water' : 'temp'));
 
+                const parsedTemp = body.temp !== undefined && body.temp !== null ? parseFloat(body.temp) : NaN;
+                const tempVal = entryType === 'temp' ? (Number.isNaN(parsedTemp) ? 37.0 : parsedTemp) : null;
+
+                child.points48h = Array.isArray(child.points48h) ? child.points48h : [];
                 child.points48h.forEach(p => {
                     if (p.createdAtMs) p.hours_ago = +((nowMs - p.createdAtMs) / 3600000).toFixed(2);
                     else p.hours_ago = Math.min(48, (p.hours_ago || 0) + 1);
                 });
 
                 const newEntry = {
-                    id: 'p_' + nowMs,
-                    temp,
-                    drink: body.drink ? body.drink.trim() : null,
-                    med: body.med ? body.med.trim() : null,
-                    note: (body.note || 'Measurement').trim(),
+                    id: 'e_' + nowMs + '_' + crypto.randomBytes(2).toString('hex'),
+                    type: entryType,
+                    temp: tempVal,
+                    title: body.title ? String(body.title).trim() : null,
+                    dose: body.dose ? String(body.dose).trim() : null,
+                    ml: body.ml !== undefined && body.ml !== null ? Number(body.ml) : null,
+                    wet: !!body.wet,
+                    drink: body.drink ? String(body.drink).trim() : null,
+                    med: body.med ? String(body.med).trim() : null,
+                    note: (body.note || (entryType === 'temp' ? 'Reading' : entryType === 'med' ? 'Medicine' : 'Hydration')).trim(),
+                    time: body.time ? String(body.time).trim() : null,
                     author: activeUser.name || 'Parent',
                     hours_ago: 0,
                     createdAtMs: nowMs,
-                    timestamp: 'Just now'
+                    timestamp: body.time ? String(body.time).trim() : 'Just now'
                 };
 
                 child.points48h.push(newEntry);
@@ -405,7 +435,7 @@ const server = http.createServer(async (req, res) => {
                 return sendJson(res, 200, { success: true, data: newEntry });
             }
 
-            // PUT /api/children/:id/meta (Update growth, urine logs, vaccines, archived episodes)
+            // PUT /api/children/:id/meta (Update child profile details)
             const childMetaMatch = pathname.match(/^\/api\/children\/([^/]+)\/meta$/);
             if (childMetaMatch && method === 'PUT') {
                 const childId = childMetaMatch[1];
@@ -418,6 +448,8 @@ const server = http.createServer(async (req, res) => {
                 if (body.weight !== undefined) child.weight = parseFloat(body.weight) || child.weight;
                 if (body.height !== undefined) child.height = parseFloat(body.height) || child.height;
                 if (body.age !== undefined) child.age = parseFloat(body.age) || child.age;
+                if (body.allergies !== undefined) child.allergies = String(body.allergies).trim() || 'None';
+                if (body.doctorPhone !== undefined) child.doctorPhone = String(body.doctorPhone).trim();
                 if (body.episode !== undefined) child.episode = String(body.episode).trim();
                 if (body.lastUrineMs !== undefined) child.lastUrineMs = body.lastUrineMs;
                 if (Array.isArray(body.urineLogs)) child.urineLogs = body.urineLogs;
@@ -438,7 +470,7 @@ const server = http.createServer(async (req, res) => {
                     return sendJson(res, 404, { success: false, message: 'Child not found' });
                 }
 
-                child.points48h = child.points48h.filter(p => p.id !== entryId);
+                child.points48h = (child.points48h || []).filter(p => p.id !== entryId);
                 saveDatabase();
                 return sendJson(res, 200, { success: true, message: 'Entry deleted' });
             }
@@ -454,13 +486,14 @@ const server = http.createServer(async (req, res) => {
 
                 const body = await parseJsonBody(req);
                 const newRem = {
-                    id: 'r_' + Date.now(),
+                    id: 'r_' + Date.now() + '_' + crypto.randomBytes(2).toString('hex'),
                     title: (body.title || 'Reminder').trim(),
-                    time: (body.time || 'Scheduled').trim(),
+                    time: (body.time || 'Today').trim(),
                     author: activeUser.name || 'Parent',
                     done: false
                 };
 
+                child.reminders = Array.isArray(child.reminders) ? child.reminders : [];
                 child.reminders.unshift(newRem);
                 saveDatabase();
                 return sendJson(res, 200, { success: true, data: newRem });
@@ -475,7 +508,7 @@ const server = http.createServer(async (req, res) => {
                     return sendJson(res, 404, { success: false, message: 'Child not found' });
                 }
 
-                const rem = child.reminders.find(r => r.id === remId);
+                const rem = (child.reminders || []).find(r => r.id === remId);
                 if (!rem) return sendJson(res, 404, { success: false, message: 'Reminder not found' });
 
                 rem.done = !rem.done;
@@ -492,12 +525,10 @@ const server = http.createServer(async (req, res) => {
                     return sendJson(res, 404, { success: false, message: 'Child not found' });
                 }
 
-                child.reminders = child.reminders.filter(r => r.id !== remId);
+                child.reminders = (child.reminders || []).filter(r => r.id !== remId);
                 saveDatabase();
                 return sendJson(res, 200, { success: true, message: 'Reminder deleted' });
             }
-
-
 
             return sendJson(res, 404, { success: false, message: 'API route not found' });
         } catch (err) {
@@ -530,16 +561,29 @@ const server = http.createServer(async (req, res) => {
 
     // ---------------- STATIC SERVING (PWA + HTML) ----------------
     if (pathname === '/manifest.json') {
-        const manifestPath = path.join(__dirname, 'static', 'manifest.json');
+        const manifestPath = fs.existsSync(path.join(__dirname, 'static', 'manifest.json'))
+            ? path.join(__dirname, 'static', 'manifest.json')
+            : path.join(__dirname, 'manifest.json');
         if (fs.existsSync(manifestPath)) {
             return sendStaticFile(manifestPath, 'application/manifest+json; charset=utf-8');
         }
     }
 
     if (pathname === '/sw.js') {
-        const swPath = path.join(__dirname, 'static', 'sw.js');
+        const swPath = fs.existsSync(path.join(__dirname, 'static', 'sw.js'))
+            ? path.join(__dirname, 'static', 'sw.js')
+            : path.join(__dirname, 'sw.js');
         if (fs.existsSync(swPath)) {
             return sendStaticFile(swPath, 'application/javascript; charset=utf-8');
+        }
+    }
+
+    if (pathname === '/icon.svg' || pathname === '/favicon.ico') {
+        const iconPath = fs.existsSync(path.join(__dirname, 'static', 'icon.svg'))
+            ? path.join(__dirname, 'static', 'icon.svg')
+            : path.join(__dirname, 'icon.svg');
+        if (fs.existsSync(iconPath)) {
+            return sendStaticFile(iconPath, 'image/svg+xml; charset=utf-8');
         }
     }
 
@@ -558,10 +602,10 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log('===========================================================');
-    console.log('🏥  Chrono — Server Ready (Render / Local Node)');
+    console.log('NestNote — Server Ready (Render / Local Node)');
     console.log('===========================================================');
-    console.log(`⚡ Server listening on port: ${PORT}`);
-    console.log(`👉 Open in browser:          http://localhost:${PORT}`);
-    console.log(`🌐 Render health check:      http://localhost:${PORT}/api/health`);
+    console.log(`Server listening on port: ${PORT}`);
+    console.log(`Open in browser:          http://localhost:${PORT}`);
+    console.log(`Render health check:      http://localhost:${PORT}/api/health`);
     console.log('===========================================================');
 });
