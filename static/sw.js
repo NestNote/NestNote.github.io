@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nestnote-pwa-v1.8';
+const CACHE_NAME = 'nestnote-pwa-v1.9';
 const CORE_ASSETS = [
   './',
   './manifest.json',

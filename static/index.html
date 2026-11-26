@@ -405,6 +405,12 @@
         <div id="sheetBody" class="overflow-y-auto px-5 pb-8 pt-2"></div>
       </div>
     </div>
+
+    <!-- Fullscreen Photo Lightbox -->
+    <div id="photoLightbox" class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onclick="closePhotoLightbox()">
+      <img id="photoLightboxImg" src="" alt="Attached photo" class="max-w-full max-h-[90dvh] rounded-2xl object-contain shadow-2xl"/>
+      <button onclick="closePhotoLightbox()" class="fixed top-5 right-5 w-10 h-10 rounded-full bg-white/15 text-white text-lg font-bold flex items-center justify-center cursor-pointer">×</button>
+    </div>
   </div>
 
 <script>
@@ -566,7 +572,29 @@ const SKIN_OPTIONS = [
   'Hives / Welts'
 ];
 
-const draft = { tempC: 37.0, medName: '', medUnit: 'ml', dose: 5.0, ml: 120, wet: false, comment: '', skinSelected: [], skinCustom: '' };
+const SLEEP_QUALITIES = ['Calm', 'Restless', 'Woke up often', 'Hard to fall asleep'];
+const FOOD_APPETITES = ['Ate well', 'Small bite', 'Refused food'];
+const DIAPER_TYPES = [
+  { id: 'wet', label: 'Wet (pee)' },
+  { id: 'stool', label: 'Stool' },
+  { id: 'both', label: 'Both' }
+];
+const STOOL_OPTIONS = ['Normal', 'Soft', 'Loose / Diarrhea', 'Hard'];
+const BREATHING_OPTIONS = ['Clear', 'Dry cough', 'Wet cough', 'Wheezing', 'Runny / stuffy nose', 'Fast breathing'];
+
+const draft = {
+  tempC: 37.0,
+  medName: '', medUnit: 'ml', dose: 5.0,
+  ml: 120, wet: false,
+  comment: '', photo: '',
+  skinSelected: [], skinCustom: '',
+  sleepHours: 1.5, sleepQuality: 'Calm',
+  foodAppetite: 'Ate well', foodText: '',
+  diaperType: 'wet', stool: 'Normal',
+  breathingTags: [], respRate: 0,
+  bpm: 95,
+  customName: '', customVal: '', customUnit: ''
+};
 const authForm = { name: '', user: '', pass: '', error: '', badFields: new Set() };
 const setupForm = { name: '', age: '', weight: '', allergies: '', doctor: '', joinCode: '', error: '', badFields: new Set() };
 let familyJoinInput = '';
@@ -641,68 +669,40 @@ function updateWaterGoalPreview(elId, ageVal) {
 }
 
 function normalizeServerEntry(p) {
-  const type = ['temp', 'med', 'water', 'note'].includes(p.type)
+  const VALID_TYPES = ['temp', 'med', 'water', 'note', 'sleep', 'food', 'diaper', 'breathing', 'pulse', 'custom'];
+  const type = VALID_TYPES.includes(p.type)
     ? p.type
     : (p.med ? 'med' : (p.drink || p.ml ? 'water' : (p.skin || p.comment ? 'note' : 'temp')));
   const createdAtMs = Number(p.createdAtMs) || 0;
   const time = p.time || (createdAtMs ? fmtHHMMFromMs(createdAtMs) : (p.timestamp || 'Just now'));
   const author = p.author ? String(p.author).trim() : '';
   const comment = p.comment ? String(p.comment).trim() : '';
+  const photo = (typeof p.photo === 'string' && p.photo.startsWith('data:image/')) ? p.photo : '';
   const skin = Array.isArray(p.skin)
     ? p.skin.map(s => String(s || '').trim()).filter(Boolean)
     : (p.skin ? [String(p.skin).trim()].filter(Boolean) : []);
+  const breathingTags = Array.isArray(p.breathingTags)
+    ? p.breathingTags.map(s => String(s || '').trim()).filter(Boolean)
+    : [];
 
-  if (type === 'note') {
-    return {
-      id: p.id,
-      type: 'note',
-      skin,
-      comment,
-      time,
-      note: p.note || '',
-      author,
-      createdAtMs
-    };
-  }
+  const base = { id: p.id, type, time, author, comment, photo, createdAtMs };
+
+  if (type === 'note') return { ...base, skin, note: p.note || '' };
+  if (type === 'sleep') return { ...base, hours: Number(p.hours) || 0, quality: p.quality || 'Calm' };
+  if (type === 'food') return { ...base, quality: p.quality || 'Ate well', title: p.title || '' };
+  if (type === 'diaper') return { ...base, diaperType: p.diaperType || 'wet', stool: p.stool || '' };
+  if (type === 'breathing') return { ...base, breathingTags, respRate: p.respRate ? Number(p.respRate) : null };
+  if (type === 'pulse') return { ...base, bpm: Number(p.bpm) || 95 };
+  if (type === 'custom') return { ...base, customName: p.customName || p.title || 'Custom', customVal: String(p.customVal ?? ''), customUnit: p.customUnit || '' };
   if (type === 'med') {
     const cleanNote = (p.note && !/^Logged by /i.test(p.note)) ? p.note : '';
-    return {
-      id: p.id,
-      type: 'med',
-      title: p.title || p.med || 'Medicine',
-      dose: p.dose || '',
-      time,
-      note: cleanNote,
-      comment,
-      author,
-      createdAtMs
-    };
+    return { ...base, title: p.title || p.med || 'Medicine', dose: p.dose || '', note: cleanNote };
   }
   if (type === 'water') {
-    return {
-      id: p.id,
-      type: 'water',
-      title: p.title || 'Water',
-      ml: Number(p.ml) || parseMlFromText(p.drink),
-      wet: !!p.wet,
-      time,
-      note: p.note || '',
-      comment,
-      author,
-      createdAtMs
-    };
+    return { ...base, title: p.title || 'Water', ml: Number(p.ml) || parseMlFromText(p.drink), wet: !!p.wet, note: p.note || '' };
   }
   const tempC = Number(p.temp ?? p.tempC ?? 37.0);
-  return {
-    id: p.id,
-    type: 'temp',
-    tempC: Number.isNaN(tempC) ? 37.0 : tempC,
-    time,
-    note: p.note || statusOf(tempC).label,
-    comment,
-    author,
-    createdAtMs
-  };
+  return { ...base, tempC: Number.isNaN(tempC) ? 37.0 : tempC, note: p.note || statusOf(tempC).label };
 }
 
 function normalizeServerChild(sc) {
@@ -751,6 +751,13 @@ const ICONS = {
   pill: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/><path d="m8.5 8.5 7 7"/></svg>`,
   drop: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2.7 6.3 10.6a7 7 0 1 0 11.4 0L12 2.7z"/></svg>`,
   note: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>`,
+  sleep: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`,
+  food: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg>`,
+  diaper: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v4a8 8 0 0 1-16 0V6z"/><path d="M4 10h4a4 4 0 0 1 4 4v4"/><path d="M20 10h-4a4 4 0 0 0-4 4v4"/></svg>`,
+  breathing: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.59 4.59A2 2 0 1 1 11 8H2"/><path d="M12.59 19.41A2 2 0 1 0 14 16H2"/><path d="M17.73 7.73A2.5 2.5 0 1 1 19.5 12H2"/></svg>`,
+  pulse: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 7.65l1.06 1.06L12 20.65l7.36-7.36 1.06-1.06a5.4 5.4 0 0 0 0-7.65z"/></svg>`,
+  custom: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`,
+  camera: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
   palette: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H17c2.8 0 5-2.2 5-5 0-4.4-4.5-8.4-10-8.4z"/></svg>`,
   check: `<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
 };
@@ -767,6 +774,191 @@ function fmtT(c) {
 }
 function fmtW(kg) { return state.unit === 'imperial' ? `${(kg * 2.20462).toFixed(1)} lb` : `${kg.toFixed(1)} kg`; }
 function fmtMl(ml) { return state.unit === 'imperial' ? `${(ml / 29.5735).toFixed(1)} oz` : `${Math.round(ml)} ml`; }
+function fmtHours(h) {
+  const hrs = Math.floor(h);
+  const mins = Math.round((h - hrs) * 60);
+  if (hrs > 0 && mins > 0) return `${hrs}h ${mins}m`;
+  if (hrs > 0) return `${hrs}h`;
+  return `${mins}m`;
+}
+
+function countDiapers(c) {
+  if (!c) return { wet: 0, stool: 0 };
+  let wet = 0, stool = 0;
+  c.entries.forEach(e => {
+    if (e.type === 'water' && e.wet) wet++;
+    if (e.type === 'diaper') {
+      if (e.diaperType === 'wet' || e.diaperType === 'both') wet++;
+      if (e.diaperType === 'stool' || e.diaperType === 'both') stool++;
+    }
+  });
+  return { wet, stool };
+}
+
+function savedCustomMetricNames(c) {
+  if (!c) return [];
+  const seen = new Map();
+  c.entries.filter(e => e.type === 'custom' && e.customName).forEach(e => {
+    const key = e.customName.toLowerCase();
+    if (!seen.has(key)) seen.set(key, { name: e.customName, unit: e.customUnit || '' });
+  });
+  return Array.from(seen.values()).slice(0, 6);
+}
+
+function describeEntry(e, showAuthor) {
+  const byTag = (showAuthor && e.author) ? ` · by ${esc(e.author)}` : '';
+  const cmtTag = e.comment ? ` · ${esc(e.comment)}` : '';
+
+  if (e.type === 'temp') {
+    const st = statusOf(e.tempC);
+    return {
+      bg: st.hex, icon: ICONS.today, title: 'Temperature',
+      sub: `${esc(e.time)} · ${esc(e.note || st.label)}${cmtTag}${byTag}`,
+      detail: `${esc(e.note || st.label)}${cmtTag}${byTag}`,
+      val: fmtT(e.tempC).full, valColor: st.color
+    };
+  }
+  if (e.type === 'med') {
+    return {
+      bg: 'var(--med)', icon: ICONS.pill,
+      title: `${esc(e.title)}${e.dose ? ' · ' + esc(e.dose) : ''}`,
+      sub: `${esc(e.time)}${e.note ? ' · ' + esc(e.note) : ''}${cmtTag}${byTag || (e.author ? ' · by ' + esc(e.author) : '')}`,
+      detail: `${esc(e.dose || 'Medicine')}${e.note ? ' · ' + esc(e.note) : ''}${cmtTag}${byTag}`,
+      val: esc(e.dose || 'Logged'), valColor: 'var(--ink)'
+    };
+  }
+  if (e.type === 'water') {
+    return {
+      bg: '#0EA5E9', icon: ICONS.drop,
+      title: `${fmtMl(e.ml)} ${esc(e.title || 'Water')}`,
+      sub: `${esc(e.time)}${e.wet ? ' · Wet diaper' : ''}${cmtTag}${byTag}`,
+      detail: `${e.wet ? 'Wet diaper' : 'Hydration'}${cmtTag}${byTag}`,
+      val: `+${fmtMl(e.ml)}`, valColor: 'var(--ink)'
+    };
+  }
+  if (e.type === 'note') {
+    const skinStr = (e.skin && e.skin.length) ? e.skin.join(', ') : '';
+    return {
+      bg: '#D95B82', icon: ICONS.note,
+      title: skinStr ? `Skin: ${esc(skinStr)}` : 'Comment',
+      sub: `${esc(e.time)}${cmtTag}${byTag}`,
+      detail: `${e.comment ? esc(e.comment) : 'Skin observation'}${byTag}`,
+      val: skinStr ? 'Skin' : 'Note', valColor: 'var(--ink)'
+    };
+  }
+  if (e.type === 'sleep') {
+    return {
+      bg: '#6366F1', icon: ICONS.sleep,
+      title: `Sleep · ${esc(e.quality || 'Calm')}`,
+      sub: `${esc(e.time)}${cmtTag}${byTag}`,
+      detail: `${esc(e.quality || 'Calm')}${cmtTag}${byTag}`,
+      val: fmtHours(e.hours || 0), valColor: 'var(--ink)'
+    };
+  }
+  if (e.type === 'food') {
+    return {
+      bg: '#16A34A', icon: ICONS.food,
+      title: `Food · ${esc(e.quality || 'Ate well')}`,
+      sub: `${esc(e.time)}${e.title ? ' · ' + esc(e.title) : ''}${cmtTag}${byTag}`,
+      detail: `${e.title ? esc(e.title) : esc(e.quality || 'Meal')}${cmtTag}${byTag}`,
+      val: e.quality === 'Refused food' ? 'Refused' : 'Meal', valColor: 'var(--ink)'
+    };
+  }
+  if (e.type === 'diaper') {
+    const lbl = e.diaperType === 'both' ? 'Wet & Stool' : e.diaperType === 'stool' ? 'Stool' : 'Wet (pee)';
+    const stoolPart = (e.diaperType !== 'wet' && e.stool) ? ` · ${esc(e.stool)}` : '';
+    return {
+      bg: '#0D9488', icon: ICONS.diaper,
+      title: `Diaper · ${lbl}`,
+      sub: `${esc(e.time)}${stoolPart}${cmtTag}${byTag}`,
+      detail: `${lbl}${stoolPart}${cmtTag}${byTag}`,
+      val: e.diaperType === 'both' ? 'Both' : e.diaperType === 'stool' ? 'Stool' : 'Wet', valColor: 'var(--ink)'
+    };
+  }
+  if (e.type === 'breathing') {
+    const tags = (e.breathingTags && e.breathingTags.length) ? e.breathingTags.join(', ') : 'Checked';
+    return {
+      bg: '#0284C7', icon: ICONS.breathing,
+      title: `Breathing · ${esc(tags)}`,
+      sub: `${esc(e.time)}${e.respRate ? ` · ${e.respRate} breaths/min` : ''}${cmtTag}${byTag}`,
+      detail: `${esc(tags)}${e.respRate ? ` · ${e.respRate}/min` : ''}${cmtTag}${byTag}`,
+      val: e.respRate ? `${e.respRate}/min` : 'Logged', valColor: 'var(--ink)'
+    };
+  }
+  if (e.type === 'pulse') {
+    return {
+      bg: '#E11D48', icon: ICONS.pulse,
+      title: 'Pulse',
+      sub: `${esc(e.time)}${cmtTag}${byTag}`,
+      detail: `Heart rate${cmtTag}${byTag}`,
+      val: `${e.bpm} bpm`, valColor: '#E11D48'
+    };
+  }
+  return {
+    bg: 'var(--brand)', icon: ICONS.custom,
+    title: esc(e.customName || 'Custom'),
+    sub: `${esc(e.time)}${cmtTag}${byTag}`,
+    detail: `${esc(e.customVal || '')}${e.customUnit ? ' ' + esc(e.customUnit) : ''}${cmtTag}${byTag}`,
+    val: `${esc(e.customVal || '')}${e.customUnit ? ' ' + esc(e.customUnit) : ''}`, valColor: 'var(--ink)'
+  };
+}
+
+function photoPickerHtml() {
+  if (draft.photo) {
+    return `
+      <div class="soft-pill rounded-2xl p-2.5 flex items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <img src="${draft.photo}" alt="Preview" onclick="openPhotoLightbox(draft.photo)" class="w-11 h-11 rounded-xl object-cover shrink-0 cursor-pointer"/>
+          <div class="text-xs font-semibold truncate" style="color: var(--ink);">Photo attached</div>
+        </div>
+        <button type="button" onclick="removeDraftPhoto()" class="px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer" style="background: var(--card-solid); color: var(--danger);">Remove</button>
+      </div>`;
+  }
+  return `
+    <label class="soft-pill rounded-2xl px-4 py-2.5 flex items-center justify-between gap-2 mb-4 cursor-pointer">
+      <span class="flex items-center gap-2 text-xs font-semibold" style="color: var(--muted);">${ICONS.camera}<span>Add photo (optional)</span></span>
+      <span class="text-xs font-bold" style="color: var(--brand);">Choose</span>
+      <input type="file" accept="image/*" onchange="handlePhotoInput(this)" class="hidden"/>
+    </label>`;
+}
+
+function handlePhotoInput(inputEl) {
+  const file = inputEl && inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 900;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w >= h) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+        else { w = Math.round(w * (maxDim / h)); h = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      draft.photo = canvas.toDataURL('image/jpeg', 0.72);
+      renderSheet();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeDraftPhoto() { draft.photo = ''; renderSheet(); }
+function openPhotoLightbox(src) {
+  if (!src) return;
+  const img = document.getElementById('photoLightboxImg');
+  const box = document.getElementById('photoLightbox');
+  if (img && box) { img.src = src; box.classList.remove('hidden'); }
+}
+function closePhotoLightbox() {
+  const box = document.getElementById('photoLightbox');
+  if (box) box.classList.add('hidden');
+}
 function statusOf(c) {
   if (c >= 39.5) return { label: 'High Fever', color: 'var(--danger)', hex: '#D6384E', mercury: 'linear-gradient(90deg, #F87171 0%, #D6384E 100%)' };
   if (c >= 38.0) return { label: 'Fever', color: 'var(--danger)', hex: '#E05264', mercury: 'linear-gradient(90deg, #FB923C 0%, #E05264 100%)' };
@@ -972,7 +1164,7 @@ function renderToday() {
   const fillPct = hasTemp ? Math.max(14, Math.min(96, ((curC - 35.5) / 5.7) * 100)) : 6;
 
   const lastMed = c.entries.find(e => e.type === 'med');
-  const lastNote = c.entries.find(e => e.type === 'note');
+  const lastMore = c.entries.find(e => !['temp', 'med', 'water'].includes(e.type));
   const waters = c.entries.filter(e => e.type === 'water');
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
   const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
@@ -1062,16 +1254,16 @@ function renderToday() {
         </button>
       </div>
 
-      <!-- TACTILE SKIN COVERS & COMMENTS CARD -->
-      <button onclick="openSheet('note')" class="w-full glass-card rounded-[26px] px-4 py-3.5 text-left cursor-pointer flex items-center justify-between gap-3">
+      <!-- CLEAN HEALTH & NOTES LAUNCHER (keeps Home uncluttered!) -->
+      <button onclick="openSheet('more')" class="w-full glass-card rounded-[26px] px-4 py-3.5 text-left cursor-pointer flex items-center justify-between gap-3">
         <div class="flex items-center gap-3 min-w-0">
           <span class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style="background: var(--brand-soft); color: var(--brand);">${ICONS.note}</span>
           <div class="min-w-0">
-            <div class="text-sm font-bold truncate" style="color: var(--ink);">Skin &amp; Comment</div>
-            <div class="text-xs truncate mt-0.5" style="color: var(--muted);">${lastNote ? esc([].concat(lastNote.skin || [], lastNote.comment ? [lastNote.comment] : []).join(' · ')) : 'Skin covers, rash, or parent note'}</div>
+            <div class="text-sm font-bold truncate" style="color: var(--ink);">Health &amp; Notes</div>
+            <div class="text-xs truncate mt-0.5" style="color: var(--muted);">${lastMore ? `${describeEntry(lastMore, false).title} · ${esc(lastMore.time)}` : 'Skin, sleep, food, diaper, breathing, pulse, custom'}</div>
           </div>
         </div>
-        <span class="px-3 py-1.5 rounded-full text-xs font-bold shrink-0" style="background: var(--soft); color: var(--brand);">+ Add</span>
+        <span class="px-3 py-1.5 rounded-full text-xs font-bold shrink-0" style="background: var(--soft); color: var(--brand);">+ Log</span>
       </button>
 
       <!-- Today List -->
@@ -1083,35 +1275,18 @@ function renderToday() {
         ${list.length ? `
           <div class="pb-1">
             ${list.map(e => {
-              const isT = e.type === 'temp', isM = e.type === 'med', isN = e.type === 'note';
-              const bg = isT ? statusOf(e.tempC).hex : isM ? 'var(--med)' : isN ? 'var(--brand)' : '#0EA5E9';
-              const icon = isT ? ICONS.today : isM ? ICONS.pill : isN ? ICONS.note : ICONS.drop;
-              const skinStr = isN && e.skin && e.skin.length ? e.skin.join(', ') : '';
-              const title = isT
-                ? 'Temperature'
-                : isM
-                  ? `${esc(e.title)}${e.dose ? ' · ' + esc(e.dose) : ''}`
-                  : isN
-                    ? (skinStr ? `Skin: ${esc(skinStr)}` : 'Parent Comment')
-                    : `${fmtMl(e.ml)} ${esc(e.title)}`;
-              const byTag = (showAuthor && e.author) ? ` · by ${esc(e.author)}` : '';
-              const cmtTag = e.comment ? ` · ${esc(e.comment)}` : '';
-              const sub = isT
-                ? `${esc(e.time)} · ${esc(e.note || 'Reading')}${cmtTag}${byTag}`
-                : isM
-                  ? `${esc(e.time)}${e.note ? ' · ' + esc(e.note) : ''}${cmtTag}${byTag || (e.author ? ' · by ' + esc(e.author) : '')}`
-                  : isN
-                    ? `${esc(e.time)}${e.comment ? ' · ' + esc(e.comment) : ''}${byTag}`
-                    : `${esc(e.time)}${e.wet ? ' · Wet diaper' : ''}${cmtTag}${byTag}`;
-              const val = isT ? fmtT(e.tempC).full : isM ? esc(e.dose || 'Logged') : isN ? (skinStr ? 'Skin' : 'Note') : `+${fmtMl(e.ml)}`;
+              const info = describeEntry(e, showAuthor);
               return `
                 <button onclick="openDetail('${esc(e.id)}')" class="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer hover:opacity-90">
-                  <span class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0" style="background: ${bg};">${icon}</span>
+                  <span class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0" style="background: ${info.bg};">${info.icon}</span>
                   <div class="flex-1 min-w-0">
-                    <div class="text-sm font-semibold truncate" style="color: var(--ink);">${title}</div>
-                    <div class="text-xs truncate" style="color: var(--muted);">${sub}</div>
+                    <div class="text-sm font-semibold truncate" style="color: var(--ink);">${info.title}</div>
+                    <div class="text-xs truncate" style="color: var(--muted);">${info.sub}</div>
                   </div>
-                  <div class="text-sm font-bold tabular shrink-0" style="color: ${isT ? statusOf(e.tempC).color : 'var(--ink)'};">${val}</div>
+                  <div class="flex items-center gap-2 shrink-0">
+                    ${e.photo ? `<img src="${e.photo}" alt="" class="w-8 h-8 rounded-lg object-cover border" style="border-color: var(--border);"/>` : ''}
+                    <div class="text-sm font-bold tabular" style="color: ${info.valColor};">${info.val}</div>
+                  </div>
                 </button>`;
             }).join('')}
           </div>
@@ -1172,6 +1347,35 @@ function renderChart() {
             <p class="text-xs" style="color: var(--muted);">Log a temperature reading to plot ${esc(c.name)}'s curve.</p>
           </div>`}
       </div>
+      ${(() => {
+        const pList = c.entries.filter(e => e.type === 'pulse').slice().reverse();
+        if (!pList.length) return '';
+        const pMax = Math.max(...pList.map(x => x.bpm));
+        const pMin = Math.min(...pList.map(x => x.bpm));
+        const yMin = Math.max(50, Math.min(70, pMin - 10));
+        const yMax = Math.min(200, Math.max(150, pMax + 10));
+        const pY = v => pT + (1 - (v - yMin) / Math.max(1, yMax - yMin)) * (H - pT - pB);
+        const pPts = pList.map((p, i) => ({ x: pL + (pList.length > 1 ? i / (pList.length - 1) : 0.5) * (W - pL - pR), y: pY(p.bpm), p }));
+        let pd = `M ${pPts[0].x.toFixed(1)} ${pPts[0].y.toFixed(1)}`;
+        for (let i = 1; i < pPts.length; i++) {
+          const cx = (pPts[i - 1].x + pPts[i].x) / 2;
+          pd += ` C ${cx.toFixed(1)} ${pPts[i - 1].y.toFixed(1)}, ${cx.toFixed(1)} ${pPts[i].y.toFixed(1)}, ${pPts[i].x.toFixed(1)} ${pPts[i].y.toFixed(1)}`;
+        }
+        return `
+          <div class="glass-card rounded-[28px] p-4">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm font-bold" style="color: var(--ink);">Pulse Trend · <span class="tabular" style="color:#E11D48;">${pList[pList.length - 1].bpm} bpm</span></span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-semibold" style="background: rgba(225,29,72,0.12); color: #E11D48;">${pList.length} ${pList.length === 1 ? 'reading' : 'readings'}</span>
+            </div>
+            <svg viewBox="0 0 ${W} ${H}" class="w-full h-[140px] overflow-visible">
+              <text x="${W - 4}" y="${(pY(yMax) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--muted)">${yMax}</text>
+              <text x="${W - 4}" y="${(pY(Math.round((yMin + yMax)/2)) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--muted)">${Math.round((yMin + yMax)/2)}</text>
+              <text x="${W - 4}" y="${(pY(yMin) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--muted)">${yMin}</text>
+              ${pPts.length > 1 ? `<path d="${pd}" fill="none" stroke="#E11D48" stroke-width="3" stroke-linecap="round"/>` : ''}
+              ${pPts.map(pt => `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="4.5" fill="#E11D48" stroke="var(--card-solid)" stroke-width="2"/>`).join('')}
+            </svg>
+          </div>`;
+      })()}
     </div>`;
 }
 
@@ -1279,7 +1483,7 @@ function buildSummaryText(c) {
   const latest = tList[0] || null;
   const peakEntry = tList.length ? tList.reduce((a, b) => (b.tempC > a.tempC ? b : a), tList[0]) : null;
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
-  const wetCount = waters.filter(w => w.wet).length;
+  const diapers = countDiapers(c);
   const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
   const waterPct = Math.round((waterMl / targetMl) * 100);
   const showAuthor = isFamilyChild(c);
@@ -1293,7 +1497,7 @@ function buildSummaryText(c) {
     `Latest Temperature: ${latest ? `${fmtT(latest.tempC).full} (${statusOf(latest.tempC).label}) at ${latest.time}` : 'None'}`,
     `Peak Temperature: ${peakEntry ? `${fmtT(peakEntry.tempC).full} at ${peakEntry.time}` : 'None'}`,
     `Medicines Given: ${meds.length ? meds.map(m => `${m.title}${m.dose ? ' ' + m.dose : ''} (${m.time}${showAuthor && m.author ? ', by ' + m.author : ''})`).join(', ') : 'None'}`,
-    `Fluids Today: ${fmtMl(waterMl)} (${waterPct}% of ${fmtMl(targetMl)} daily goal for ${c.age} yr${waterPct > 100 ? ' — over daily norm' : ''}) · ${wetCount} wet ${wetCount === 1 ? 'diaper' : 'diapers'}`,
+    `Fluids Today: ${fmtMl(waterMl)} (${waterPct}% of ${fmtMl(targetMl)} daily goal for ${c.age} yr${waterPct > 100 ? ' — over daily norm' : ''}) · ${diapers.wet} wet, ${diapers.stool} stool`,
     ...(notes.length ? [`Skin & Notes: ${notes.map(n => `${n.time} ${[].concat(n.skin || [], n.comment ? [n.comment] : []).join(' — ')}`).join('; ')}`] : []),
     ``,
     `Full Timeline (${c.entries.length} entries):`
@@ -1301,12 +1505,17 @@ function buildSummaryText(c) {
   c.entries.forEach(e => {
     const byStr = (showAuthor && e.author) ? ` · by ${e.author}` : '';
     const cmt = e.comment ? ` · Comment: ${e.comment}` : '';
-    if (e.type === 'temp') lines.push(`- ${e.time} | Temp: ${fmtT(e.tempC).full} (${e.note || statusOf(e.tempC).label})${cmt}${byStr}`);
-    else if (e.type === 'med') lines.push(`- ${e.time} | Medicine: ${e.title}${e.dose ? ' · ' + e.dose : ''}${e.note ? ' (' + e.note + ')' : ''}${cmt}${byStr}`);
-    else if (e.type === 'note') {
-      const sk = (e.skin && e.skin.length) ? `Skin: ${e.skin.join(', ')}` : '';
-      lines.push(`- ${e.time} | ${[sk, e.comment].filter(Boolean).join(' · ')}${byStr}`);
-    } else lines.push(`- ${e.time} | Fluids: +${fmtMl(e.ml)} ${e.title || 'Water'}${e.wet ? ' · Wet diaper' : ''}${cmt}${byStr}`);
+    const ph = e.photo ? ' [photo attached]' : '';
+    if (e.type === 'temp') lines.push(`- ${e.time} | Temp: ${fmtT(e.tempC).full} (${e.note || statusOf(e.tempC).label})${cmt}${ph}${byStr}`);
+    else if (e.type === 'med') lines.push(`- ${e.time} | Medicine: ${e.title}${e.dose ? ' · ' + e.dose : ''}${e.note ? ' (' + e.note + ')' : ''}${cmt}${ph}${byStr}`);
+    else if (e.type === 'water') lines.push(`- ${e.time} | Fluids: +${fmtMl(e.ml)} ${e.title || 'Water'}${e.wet ? ' · Wet diaper' : ''}${cmt}${ph}${byStr}`);
+    else if (e.type === 'note') lines.push(`- ${e.time} | ${[(e.skin && e.skin.length) ? 'Skin: ' + e.skin.join(', ') : '', e.comment].filter(Boolean).join(' · ')}${ph}${byStr}`);
+    else if (e.type === 'sleep') lines.push(`- ${e.time} | Sleep: ${fmtHours(e.hours || 0)} (${e.quality || 'Calm'})${cmt}${ph}${byStr}`);
+    else if (e.type === 'food') lines.push(`- ${e.time} | Food: ${e.quality || 'Ate well'}${e.title ? ' — ' + e.title : ''}${cmt}${ph}${byStr}`);
+    else if (e.type === 'diaper') lines.push(`- ${e.time} | Diaper: ${e.diaperType}${e.diaperType !== 'wet' && e.stool ? ' (' + e.stool + ')' : ''}${cmt}${ph}${byStr}`);
+    else if (e.type === 'breathing') lines.push(`- ${e.time} | Breathing: ${(e.breathingTags || []).join(', ') || 'Checked'}${e.respRate ? ' · ' + e.respRate + ' breaths/min' : ''}${cmt}${ph}${byStr}`);
+    else if (e.type === 'pulse') lines.push(`- ${e.time} | Pulse: ${e.bpm} bpm${cmt}${ph}${byStr}`);
+    else lines.push(`- ${e.time} | ${e.customName}: ${e.customVal}${e.customUnit ? ' ' + e.customUnit : ''}${cmt}${ph}${byStr}`);
   });
   return lines.join('\n');
 }
@@ -1318,11 +1527,12 @@ function renderReport() {
   const tChrono = tList.slice().reverse();
   const meds = c.entries.filter(e => e.type === 'med');
   const notes = c.entries.filter(e => e.type === 'note');
+  const photos = c.entries.filter(e => e.photo);
   const waters = c.entries.filter(e => e.type === 'water');
   const latest = tList[0] || null;
   const peakEntry = tList.length ? tList.reduce((a, b) => (b.tempC > a.tempC ? b : a), tList[0]) : null;
   const waterMl = waters.reduce((s, w) => s + (w.ml || 0), 0);
-  const wetCount = waters.filter(w => w.wet).length;
+  const diapers = countDiapers(c);
   const targetMl = dailyWaterGoalMl(c.age, c.weightKg);
   const waterPct = Math.round((waterMl / targetMl) * 100);
   const overWater = waterMl > targetMl;
@@ -1403,7 +1613,7 @@ function renderReport() {
           <div class="soft-pill rounded-2xl p-3.5">
             <div class="text-xs" style="color: var(--muted);">Fluids Today</div>
             <div class="text-xl font-bold tabular mt-0.5" style="color: ${overWater ? 'var(--warn)' : 'var(--water)'};">${fmtMl(waterMl)}</div>
-            <div class="text-xs tabular mt-0.5" style="color: ${overWater ? 'var(--warn)' : 'var(--muted)'};">${waterPct}%${overWater ? ' (over norm)' : ' goal'} · ${wetCount} wet</div>
+            <div class="text-xs tabular mt-0.5" style="color: ${overWater ? 'var(--warn)' : 'var(--muted)'};">${waterPct}%${overWater ? ' (over)' : ''} · ${diapers.wet}w/${diapers.stool}s</div>
           </div>
         </div>
 
@@ -1464,6 +1674,26 @@ function renderReport() {
         </div>
       </div>` : ''}
 
+      <!-- Attached Clinical Photos -->
+      ${photos.length ? `
+      <div class="glass-card rounded-[28px] p-4 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold" style="color: var(--ink);">Attached Photos</h3>
+          <span class="text-xs font-semibold tabular" style="color: var(--muted);">${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          ${photos.slice(0, 8).map(p => {
+            const inf = describeEntry(p, false);
+            return `
+              <div class="soft-pill rounded-2xl p-2 space-y-1.5">
+                <img src="${p.photo}" alt="${inf.title}" onclick="openPhotoLightbox(this.src)" class="w-full h-28 object-cover rounded-xl cursor-pointer"/>
+                <div class="text-xs font-semibold truncate" style="color: var(--ink);">${inf.title}</div>
+                <div class="text-[11px] tabular" style="color: var(--muted);">${esc(p.time)}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
+
       <!-- Complete Chronological Clinical Log -->
       <div class="glass-card rounded-[28px] p-4 space-y-2.5">
         <div class="flex items-center justify-between">
@@ -1473,31 +1703,21 @@ function renderReport() {
         ${c.entries.length ? `
           <div class="divide-y" style="border-color: var(--border);">
             ${c.entries.map(e => {
-              const isT = e.type === 'temp', isM = e.type === 'med', isN = e.type === 'note';
-              const dot = isT ? statusOf(e.tempC).hex : isM ? '#7A5AF8' : isN ? 'var(--brand)' : '#0EA5E9';
-              const skStr = isN && e.skin && e.skin.length ? e.skin.join(', ') : '';
-              const label = isT ? 'Temperature' : isM ? esc(e.title) : isN ? (skStr ? `Skin: ${esc(skStr)}` : 'Parent Comment') : `${fmtMl(e.ml)} ${esc(e.title || 'Water')}`;
-              const byTag = (showAuthor && e.author) ? ` · by ${esc(e.author)}` : '';
-              const cmtTag = e.comment ? ` · ${esc(e.comment)}` : '';
-              const detail = isT
-                ? `${esc(e.note || statusOf(e.tempC).label)}${cmtTag}${byTag}`
-                : isM
-                  ? `${esc(e.dose || 'Medicine')}${e.note ? ' · ' + esc(e.note) : ''}${cmtTag}${byTag}`
-                  : isN
-                    ? `${e.comment ? esc(e.comment) : 'Observation'}${byTag}`
-                    : `${e.wet ? 'Wet diaper' : 'Hydration'}${cmtTag}${byTag}`;
-              const val = isT ? fmtT(e.tempC).full : isM ? esc(e.dose || 'Given') : isN ? (skStr ? 'Skin' : 'Note') : `+${fmtMl(e.ml)}`;
+              const info = describeEntry(e, showAuthor);
               return `
                 <div class="py-2.5 flex items-center justify-between gap-3 text-xs">
                   <div class="flex items-center gap-2.5 min-w-0">
-                    <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background: ${dot};"></span>
+                    <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background: ${info.bg};"></span>
                     <span class="font-bold tabular shrink-0" style="color: var(--muted);">${esc(e.time)}</span>
                     <div class="min-w-0">
-                      <div class="font-semibold truncate" style="color: var(--ink);">${label}</div>
-                      ${detail ? `<div class="truncate" style="color: var(--muted);">${detail}</div>` : ''}
+                      <div class="font-semibold truncate" style="color: var(--ink);">${info.title}</div>
+                      ${info.detail ? `<div class="truncate" style="color: var(--muted);">${info.detail}</div>` : ''}
                     </div>
                   </div>
-                  <span class="font-bold tabular shrink-0" style="color: ${isT ? statusOf(e.tempC).color : 'var(--ink)'};">${val}</span>
+                  <div class="flex items-center gap-2 shrink-0">
+                    ${e.photo ? `<img src="${e.photo}" alt="" onclick="openPhotoLightbox(this.src)" class="w-7 h-7 rounded-md object-cover cursor-pointer"/>` : ''}
+                    <span class="font-bold tabular" style="color: ${info.valColor};">${info.val}</span>
+                  </div>
                 </div>`;
             }).join('')}
           </div>`
@@ -1578,6 +1798,7 @@ function waterBudget(c) {
 function openSheet(name) {
   sheet = name;
   draft.comment = '';
+  draft.photo = '';
   if (name === 'temp') {
     const t = temps(child())[0];
     draft.tempC = t ? t.tempC : 37.0;
@@ -1590,6 +1811,31 @@ function openSheet(name) {
     draft.skinSelected = [];
     draft.skinCustom = '';
   }
+  if (name === 'sleep') {
+    draft.sleepHours = 1.5;
+    draft.sleepQuality = 'Calm';
+  }
+  if (name === 'food') {
+    draft.foodAppetite = 'Ate well';
+    draft.foodText = '';
+  }
+  if (name === 'diaper') {
+    draft.diaperType = 'wet';
+    draft.stool = 'Normal';
+  }
+  if (name === 'breathing') {
+    draft.breathingTags = [];
+    draft.respRate = 0;
+  }
+  if (name === 'pulse') {
+    const lp = child()?.entries.find(e => e.type === 'pulse');
+    draft.bpm = lp ? lp.bpm : 95;
+  }
+  if (name === 'custom') {
+    draft.customName = '';
+    draft.customVal = '';
+    draft.customUnit = '';
+  }
   renderSheet();
   document.getElementById('sheetBg').classList.add('open');
 }
@@ -1600,6 +1846,24 @@ function toggleSkinOption(idx) {
   const i = draft.skinSelected.indexOf(opt);
   if (i >= 0) draft.skinSelected.splice(i, 1);
   else draft.skinSelected.push(opt);
+  renderSheet();
+}
+
+function toggleBreathingOption(idx) {
+  const opt = BREATHING_OPTIONS[idx];
+  if (!opt) return;
+  const i = draft.breathingTags.indexOf(opt);
+  if (i >= 0) draft.breathingTags.splice(i, 1);
+  else draft.breathingTags.push(opt);
+  renderSheet();
+}
+
+function pickCustomPreset(idx) {
+  const list = savedCustomMetricNames(child());
+  const item = list[idx];
+  if (!item) return;
+  draft.customName = item.name;
+  draft.customUnit = item.unit || '';
   renderSheet();
 }
 function openDetail(id) { detailId = id; openSheet('detail'); }
@@ -1698,10 +1962,11 @@ function renderSheet() {
         </div>
         <div class="text-center text-xs mt-2.5" style="color: var(--muted);">Slide along the thermometer glass to fix temperature</div>
       </div>
-      <label class="soft-pill rounded-2xl px-4 py-2.5 block mb-4">
+      <label class="soft-pill rounded-2xl px-4 py-2.5 block mb-3">
         <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
         <input id="tempCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. cold hands, sleepy, after nap..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
       </label>
+      ${photoPickerHtml()}
       <button onclick="saveTemp()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: ${st.hex};">Save ${t.full}</button>`;
   } else if (sheet === 'med') {
     const units = ['ml', 'drops', 'tab', 'tsp'];
@@ -1710,7 +1975,7 @@ function renderSheet() {
         <h3 class="text-lg font-bold">Give Medicine</h3>
         <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
       </div>
-      <div class="space-y-3 mb-5">
+      <div class="space-y-3 mb-3">
         <label class="soft-pill rounded-2xl px-4 py-3 block">
           <span class="text-xs font-medium block mb-1" style="color: var(--muted);">Medicine name</span>
           <input id="medNameInput" type="text" value="${esc(draft.medName)}" oninput="draft.medName=this.value" placeholder="Write medicine (syrup, drops, antibiotic...)" class="w-full bg-transparent text-sm font-semibold outline-none" style="color: var(--ink);"/>
@@ -1728,6 +1993,7 @@ function renderSheet() {
           <input id="medCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. taken after food, prescribed dose..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
         </label>
       </div>
+      ${photoPickerHtml()}
       <button onclick="saveMed()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: var(--med);">Save Medicine</button>`;
   } else if (sheet === 'water') {
     const { goalMl, todayMl, pct, over } = waterBudget(c);
@@ -1784,37 +2050,230 @@ function renderSheet() {
         <span class="text-xs font-bold">Also had a wet diaper</span>
         <span class="text-xs font-bold" style="color: var(--water);">${draft.wet ? '✓ Yes' : 'No'}</span>
       </button>
-      <label class="soft-pill rounded-2xl px-4 py-2.5 block mb-4">
+      <label class="soft-pill rounded-2xl px-4 py-2.5 block mb-3">
         <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
         <input id="waterCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. electrolyte solution, warm tea, soup..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
       </label>
+      ${photoPickerHtml()}
       <button onclick="saveWater()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0EA5E9;">Add +${fmtMl(draft.ml)}</button>`;
+  } else if (sheet === 'more') {
+    const tiles = [
+      { id: 'note', label: 'Skin & Note', desc: 'Rash, spots, comment', color: '#D95B82', icon: ICONS.note },
+      { id: 'sleep', label: 'Sleep', desc: 'Duration & quality', color: '#6366F1', icon: ICONS.sleep },
+      { id: 'food', label: 'Food', desc: 'Appetite & meal', color: '#16A34A', icon: ICONS.food },
+      { id: 'diaper', label: 'Diaper', desc: 'Pee & stool', color: '#0D9488', icon: ICONS.diaper },
+      { id: 'breathing', label: 'Breathing', desc: 'Cough, wheeze, rate', color: '#0284C7', icon: ICONS.breathing },
+      { id: 'pulse', label: 'Pulse', desc: 'Heart rate (bpm)', color: '#E11D48', icon: ICONS.pulse }
+    ];
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold">Health &amp; Notes</h3>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5 mb-2.5">
+        ${tiles.map(t => `
+          <button onclick="openSheet('${t.id}')" class="soft-pill rounded-[24px] p-3.5 text-left cursor-pointer active:scale-[0.98] transition flex items-center gap-3">
+            <span class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0" style="background: ${t.color};">${t.icon}</span>
+            <div class="min-w-0">
+              <div class="text-sm font-bold truncate" style="color: var(--ink);">${t.label}</div>
+              <div class="text-[11px] truncate" style="color: var(--muted);">${t.desc}</div>
+            </div>
+          </button>`).join('')}
+      </div>
+      <button onclick="openSheet('custom')" class="w-full soft-pill rounded-[24px] p-3.5 text-left cursor-pointer active:scale-[0.98] transition flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0" style="background: var(--brand);">${ICONS.custom}</span>
+          <div class="min-w-0">
+            <div class="text-sm font-bold truncate" style="color: var(--ink);">Custom Parameter</div>
+            <div class="text-xs truncate" style="color: var(--muted);">Track any own metric (SpO2, pain, weight...)</div>
+          </div>
+        </div>
+        <span class="text-xs font-bold shrink-0" style="color: var(--brand);">→</span>
+      </button>`;
   } else if (sheet === 'note') {
     b.innerHTML = `
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-bold">Skin Covers &amp; Comment</h3>
+        <div class="flex items-center gap-2"><button onclick="openSheet('more')" class="soft-pill w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer">←</button><h3 class="text-lg font-bold">Skin &amp; Comment</h3></div>
         <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
       </div>
-      <div class="space-y-3.5 mb-5">
+      <div class="space-y-3 mb-3">
         <div>
           <div class="text-xs font-semibold mb-2" style="color: var(--muted);">Skin covers (choose one or more)</div>
           <div class="flex flex-wrap gap-2">
             ${SKIN_OPTIONS.map((opt, idx) => {
               const sel = draft.skinSelected.includes(opt);
-              return `<button onclick="toggleSkinOption(${idx})" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer transition" style="background:${sel?'var(--brand)':'var(--soft)'}; color:${sel?'#FFF':'var(--ink)'};">${esc(opt)}</button>`;
+              return `<button onclick="toggleSkinOption(${idx})" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer transition" style="background:${sel?'#D95B82':'var(--soft)'}; color:${sel?'#FFF':'var(--ink)'};">${esc(opt)}</button>`;
             }).join('')}
           </div>
         </div>
-        <label class="soft-pill rounded-2xl px-4 py-3 block">
-          <span class="text-xs font-medium block mb-1" style="color: var(--muted);">Write skin observation (optional)</span>
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Write skin observation (optional)</span>
           <input id="skinCustomInput" type="text" value="${esc(draft.skinCustom)}" oninput="draft.skinCustom=this.value" placeholder="e.g. small pink spots on belly, fades when pressed..." class="w-full bg-transparent text-sm font-semibold outline-none" style="color: var(--ink);"/>
         </label>
-        <label class="soft-pill rounded-2xl px-4 py-3 block">
-          <span class="text-xs font-medium block mb-1" style="color: var(--muted);">Comment (optional)</span>
-          <textarea id="noteCommentInput" rows="3" oninput="draft.comment=this.value" placeholder="Write any comment (sleep, appetite, cough, mood, doctor advice...)" class="w-full bg-transparent text-sm font-semibold outline-none resize-none" style="color: var(--ink);">${esc(draft.comment)}</textarea>
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+          <textarea id="noteCommentInput" rows="2" oninput="draft.comment=this.value" placeholder="Write any note (mood, energy, doctor advice...)" class="w-full bg-transparent text-sm font-semibold outline-none resize-none" style="color: var(--ink);">${esc(draft.comment)}</textarea>
         </label>
       </div>
-      <button onclick="saveNote()" class="w-full py-3.5 rounded-full text-sm font-bold cursor-pointer" style="background: var(--cta-bg); color: var(--cta-ink);">Save Skin &amp; Comment</button>`;
+      ${photoPickerHtml()}
+      <button onclick="saveNote()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #D95B82;">Save Skin &amp; Comment</button>`;
+  } else if (sheet === 'sleep') {
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2"><button onclick="openSheet('more')" class="soft-pill w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer">←</button><h3 class="text-lg font-bold">Log Sleep</h3></div>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      <div class="space-y-3 mb-3">
+        <div class="soft-pill rounded-3xl p-4 flex items-center justify-between">
+          <button onclick="draft.sleepHours=Math.max(0.25,+(draft.sleepHours-0.25).toFixed(2)); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">−</button>
+          <div class="text-center">
+            <div class="text-3xl font-bold tabular" style="color: var(--ink);">${fmtHours(draft.sleepHours)}</div>
+            <div class="text-xs" style="color: var(--muted);">Sleep duration</div>
+          </div>
+          <button onclick="draft.sleepHours=Math.min(16,+(draft.sleepHours+0.25).toFixed(2)); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">+</button>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          ${SLEEP_QUALITIES.map(q => `<button onclick="draft.sleepQuality='${q}'; renderSheet();" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer transition" style="background:${draft.sleepQuality===q?'#6366F1':'var(--soft)'}; color:${draft.sleepQuality===q?'#FFF':'var(--ink)'};">${q}</button>`).join('')}
+        </div>
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+          <input id="sleepCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. woke up coughing once, napped well..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+      </div>
+      ${photoPickerHtml()}
+      <button onclick="saveSleep()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #6366F1;">Save Sleep (${fmtHours(draft.sleepHours)})</button>`;
+  } else if (sheet === 'food') {
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2"><button onclick="openSheet('more')" class="soft-pill w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer">←</button><h3 class="text-lg font-bold">Log Food</h3></div>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      <div class="space-y-3 mb-3">
+        <div class="soft-pill p-1 rounded-full grid grid-cols-3 gap-1">
+          ${FOOD_APPETITES.map(a => `<button onclick="draft.foodAppetite='${a}'; renderSheet();" class="py-2 rounded-full text-xs font-bold cursor-pointer transition" style="background:${draft.foodAppetite===a?'#16A34A':'transparent'}; color:${draft.foodAppetite===a?'#FFF':'var(--muted)'};">${a}</button>`).join('')}
+        </div>
+        <label class="soft-pill rounded-2xl px-4 py-3 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">What did they eat? (optional)</span>
+          <input id="foodTextInput" type="text" value="${esc(draft.foodText)}" oninput="draft.foodText=this.value" placeholder="e.g. chicken soup, banana, oatmeal, breastmilk..." class="w-full bg-transparent text-sm font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+          <input id="foodCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. no nausea, asked for more..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+      </div>
+      ${photoPickerHtml()}
+      <button onclick="saveFood()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #16A34A;">Save Food</button>`;
+  } else if (sheet === 'diaper') {
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2"><button onclick="openSheet('more')" class="soft-pill w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer">←</button><h3 class="text-lg font-bold">Diaper &amp; Bathroom</h3></div>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      <div class="space-y-3 mb-3">
+        <div class="soft-pill p-1 rounded-full grid grid-cols-3 gap-1">
+          ${DIAPER_TYPES.map(d => `<button onclick="draft.diaperType='${d.id}'; renderSheet();" class="py-2.5 rounded-full text-xs font-bold cursor-pointer transition" style="background:${draft.diaperType===d.id?'#0D9488':'transparent'}; color:${draft.diaperType===d.id?'#FFF':'var(--muted)'};">${d.label}</button>`).join('')}
+        </div>
+        ${draft.diaperType !== 'wet' ? `
+          <div>
+            <div class="text-xs font-semibold mb-2" style="color: var(--muted);">Stool consistency</div>
+            <div class="flex flex-wrap gap-2">
+              ${STOOL_OPTIONS.map(s => `<button onclick="draft.stool='${s}'; renderSheet();" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer transition" style="background:${draft.stool===s?'#0D9488':'var(--soft)'}; color:${draft.stool===s?'#FFF':'var(--ink)'};">${s}</button>`).join('')}
+            </div>
+          </div>` : ''}
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+          <input id="diaperCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. color, dark urine, tummy discomfort..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+      </div>
+      ${photoPickerHtml()}
+      <button onclick="saveDiaper()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0D9488;">Save Diaper</button>`;
+  } else if (sheet === 'breathing') {
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2"><button onclick="openSheet('more')" class="soft-pill w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer">←</button><h3 class="text-lg font-bold">Breathing &amp; Cough</h3></div>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      <div class="space-y-3 mb-3">
+        <div class="flex flex-wrap gap-2">
+          ${BREATHING_OPTIONS.map((opt, idx) => {
+            const sel = draft.breathingTags.includes(opt);
+            return `<button onclick="toggleBreathingOption(${idx})" class="px-3.5 py-2 rounded-full text-xs font-semibold cursor-pointer transition" style="background:${sel?'#0284C7':'var(--soft)'}; color:${sel?'#FFF':'var(--ink)'};">${esc(opt)}</button>`;
+          }).join('')}
+        </div>
+        <div class="soft-pill rounded-3xl p-4 flex items-center justify-between">
+          <button onclick="draft.respRate=Math.max(0,draft.respRate-2); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">−</button>
+          <div class="text-center">
+            <div class="text-2xl font-bold tabular" style="color: var(--ink);">${draft.respRate > 0 ? draft.respRate + ' /min' : 'Not counted'}</div>
+            <div class="text-xs" style="color: var(--muted);">Breathing rate (optional)</div>
+          </div>
+          <button onclick="draft.respRate=draft.respRate===0?24:Math.min(80,draft.respRate+2); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">+</button>
+        </div>
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+          <input id="breathingCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. barking cough at night, mild whistle..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+      </div>
+      ${photoPickerHtml()}
+      <button onclick="saveBreathing()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0284C7;">Save Breathing</button>`;
+  } else if (sheet === 'pulse') {
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2"><button onclick="openSheet('more')" class="soft-pill w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer">←</button><h3 class="text-lg font-bold">Log Pulse</h3></div>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      <div class="space-y-3 mb-3">
+        <div class="soft-pill rounded-3xl p-5 space-y-4">
+          <div class="flex items-center justify-between gap-2">
+            <button onclick="draft.bpm=Math.max(45,draft.bpm-2); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">−</button>
+            <div class="text-center tabular font-bold">
+              <span class="text-[46px] leading-none" style="color:#E11D48;">${draft.bpm}</span>
+              <span class="text-lg opacity-75"> bpm</span>
+            </div>
+            <button onclick="draft.bpm=Math.min(200,draft.bpm+2); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">+</button>
+          </div>
+          <input type="range" min="50" max="190" step="1" value="${draft.bpm}" oninput="draft.bpm=Number(this.value); renderSheet();" class="w-full accent-[#E11D48] cursor-pointer"/>
+          <div class="flex justify-between text-xs tabular" style="color: var(--muted);"><span>50</span><span>95</span><span>140</span><span>190 bpm</span></div>
+        </div>
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+          <input id="pulseCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="e.g. resting while asleep, after crying..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+      </div>
+      ${photoPickerHtml()}
+      <button onclick="savePulse()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #E11D48;">Save ${draft.bpm} bpm</button>`;
+  } else if (sheet === 'custom') {
+    const presets = savedCustomMetricNames(c);
+    b.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2"><button onclick="openSheet('more')" class="soft-pill w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer">←</button><h3 class="text-lg font-bold">Custom Parameter</h3></div>
+        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+      </div>
+      <div class="space-y-3 mb-3">
+        ${presets.length ? `
+          <div class="flex flex-wrap gap-1.5">
+            ${presets.map((p, idx) => `<button onclick="pickCustomPreset(${idx})" class="px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer" style="background: var(--brand-soft); color: var(--brand);">${esc(p.name)}${p.unit ? ' (' + esc(p.unit) + ')' : ''}</button>`).join('')}
+          </div>` : ''}
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Parameter name *</span>
+          <input id="customNameInput" type="text" value="${esc(draft.customName)}" oninput="draft.customName=this.value" placeholder="e.g. Oxygen SpO2, Pain level, Blood sugar..." class="w-full bg-transparent text-sm font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+        <div class="grid grid-cols-2 gap-2.5">
+          <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+            <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Value *</span>
+            <input id="customValInput" type="text" value="${esc(draft.customVal)}" oninput="draft.customVal=this.value" placeholder="e.g. 98 or Mild" class="w-full bg-transparent text-sm font-semibold outline-none" style="color: var(--ink);"/>
+          </label>
+          <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+            <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Unit (optional)</span>
+            <input id="customUnitInput" type="text" value="${esc(draft.customUnit)}" oninput="draft.customUnit=this.value" placeholder="e.g. %, /10, mg/dL" class="w-full bg-transparent text-sm font-semibold outline-none" style="color: var(--ink);"/>
+          </label>
+        </div>
+        <label class="soft-pill rounded-2xl px-4 py-2.5 block">
+          <span class="text-xs font-medium block mb-0.5" style="color: var(--muted);">Comment (optional)</span>
+          <input id="customCommentInput" type="text" value="${esc(draft.comment)}" oninput="draft.comment=this.value" placeholder="Any extra detail..." class="w-full bg-transparent text-xs font-semibold outline-none" style="color: var(--ink);"/>
+        </label>
+      </div>
+      ${photoPickerHtml()}
+      <button onclick="saveCustom()" class="w-full py-3.5 rounded-full text-sm font-bold cursor-pointer" style="background: var(--cta-bg); color: var(--cta-ink);">Save Parameter</button>`;
   } else if (sheet === 'themes') {
     b.innerHTML = `
       <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Choose Color Theme</h3><button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Done</button></div>
@@ -1867,16 +2326,25 @@ function renderSheet() {
   } else if (sheet === 'detail' && c) {
     const e = c.entries.find(x => x.id === detailId);
     if (!e) return closeSheet();
+    const info = describeEntry(e, false);
     b.innerHTML = `
       <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Entry Details</h3><button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button></div>
       <div class="soft-pill rounded-3xl p-4 space-y-2 mb-5 text-xs">
         <div class="flex justify-between"><span style="color: var(--muted);">Time</span><span class="font-bold tabular">${esc(e.time)}</span></div>
         ${e.author ? `<div class="flex justify-between"><span style="color: var(--muted);">Logged by</span><span class="font-bold">${esc(e.author)}</span></div>` : ''}
+        <div class="flex justify-between gap-3"><span style="color: var(--muted);">Entry</span><span class="font-bold text-right">${info.title}</span></div>
         ${e.type === 'temp' ? `<div class="flex justify-between"><span style="color: var(--muted);">Reading</span><span class="font-bold tabular">${fmtT(e.tempC).full} (${esc(e.note)})</span></div>` : ''}
         ${e.type === 'med' ? `<div class="flex justify-between"><span style="color: var(--muted);">Medicine</span><span class="font-bold">${esc(e.title)}${e.dose ? ' · ' + esc(e.dose) : ''}</span></div>` : ''}
         ${e.type === 'water' ? `<div class="flex justify-between"><span style="color: var(--muted);">Water</span><span class="font-bold tabular">+${fmtMl(e.ml)}${e.wet ? ' · Wet diaper' : ''}</span></div>` : ''}
         ${e.type === 'note' && e.skin && e.skin.length ? `<div class="flex justify-between gap-3"><span style="color: var(--muted);">Skin covers</span><span class="font-bold text-right">${esc(e.skin.join(', '))}</span></div>` : ''}
-        ${e.comment ? `<div class="pt-1 border-t" style="border-color: var(--border);"><div class="mb-0.5" style="color: var(--muted);">Comment</div><div class="font-semibold leading-relaxed" style="color: var(--ink);">${esc(e.comment)}</div></div>` : ''}
+        ${e.type === 'sleep' ? `<div class="flex justify-between"><span style="color: var(--muted);">Sleep</span><span class="font-bold tabular">${fmtHours(e.hours || 0)} · ${esc(e.quality || 'Calm')}</span></div>` : ''}
+        ${e.type === 'food' ? `<div class="flex justify-between gap-3"><span style="color: var(--muted);">Food</span><span class="font-bold text-right">${esc(e.quality || 'Ate well')}${e.title ? ' · ' + esc(e.title) : ''}</span></div>` : ''}
+        ${e.type === 'diaper' ? `<div class="flex justify-between"><span style="color: var(--muted);">Diaper</span><span class="font-bold">${e.diaperType === 'both' ? 'Wet & Stool' : e.diaperType === 'stool' ? 'Stool' : 'Wet (pee)'}${e.diaperType !== 'wet' && e.stool ? ' · ' + esc(e.stool) : ''}</span></div>` : ''}
+        ${e.type === 'breathing' ? `<div class="flex justify-between gap-3"><span style="color: var(--muted);">Breathing</span><span class="font-bold text-right">${esc((e.breathingTags || []).join(', ') || 'Checked')}${e.respRate ? ` · ${e.respRate}/min` : ''}</span></div>` : ''}
+        ${e.type === 'pulse' ? `<div class="flex justify-between"><span style="color: var(--muted);">Pulse</span><span class="font-bold tabular">${e.bpm} bpm</span></div>` : ''}
+        ${e.type === 'custom' ? `<div class="flex justify-between"><span style="color: var(--muted);">${esc(e.customName)}</span><span class="font-bold tabular">${esc(e.customVal)}${e.customUnit ? ' ' + esc(e.customUnit) : ''}</span></div>` : ''}
+        ${e.comment ? `<div class="pt-2 border-t" style="border-color: var(--border);"><div class="mb-0.5" style="color: var(--muted);">Comment</div><div class="font-semibold leading-relaxed" style="color: var(--ink);">${esc(e.comment)}</div></div>` : ''}
+        ${e.photo ? `<div class="pt-2 border-t" style="border-color: var(--border);"><div class="mb-1.5" style="color: var(--muted);">Photo (tap to enlarge)</div><img src="${e.photo}" alt="Entry photo" onclick="openPhotoLightbox(this.src)" class="w-full max-h-56 object-cover rounded-2xl cursor-pointer"/></div>` : ''}
       </div>
       <button onclick="deleteEntry('${esc(e.id)}')" class="w-full py-3.5 rounded-full text-sm font-bold cursor-pointer" style="background: rgba(220,62,85,0.14); color: var(--danger);">Delete Entry</button>`;
   }
@@ -2109,6 +2577,12 @@ function encodeSharePayload(c) {
       x.type === 'temp' ? ['t', x.id, x.tempC, x.time, x.note || '', x.createdAtMs || 0, x.comment || '']
       : x.type === 'med' ? ['m', x.id, x.title, x.dose || '', x.time, x.note || '', x.createdAtMs || 0, x.comment || '']
       : x.type === 'note' ? ['n', x.id, x.skin || [], x.comment || '', x.time, x.createdAtMs || 0]
+      : x.type === 'sleep' ? ['s', x.id, x.hours || 0, x.quality || 'Calm', x.time, x.createdAtMs || 0, x.comment || '']
+      : x.type === 'food' ? ['f', x.id, x.quality || 'Ate well', x.title || '', x.time, x.createdAtMs || 0, x.comment || '']
+      : x.type === 'diaper' ? ['d', x.id, x.diaperType || 'wet', x.stool || '', x.time, x.createdAtMs || 0, x.comment || '']
+      : x.type === 'breathing' ? ['b', x.id, x.breathingTags || [], x.respRate || 0, x.time, x.createdAtMs || 0, x.comment || '']
+      : x.type === 'pulse' ? ['p', x.id, x.bpm || 95, x.time, x.createdAtMs || 0, x.comment || '']
+      : x.type === 'custom' ? ['c', x.id, x.customName || '', x.customVal || '', x.customUnit || '', x.time, x.createdAtMs || 0, x.comment || '']
       : ['w', x.id, x.ml || 0, x.wet ? 1 : 0, x.time, x.createdAtMs || 0, x.comment || '']
     )
   };
@@ -2144,6 +2618,12 @@ function decodeSharePayload(raw) {
       if (x[0] === 't') return { id: x[1], type: 'temp', tempC: Number(x[2]), time: x[3], note: x[4], createdAtMs: Number(x[5]) || 0, comment: x[6] || '' };
       if (x[0] === 'm') return { id: x[1], type: 'med', title: x[2], dose: x[3], time: x[4], note: x[5], createdAtMs: Number(x[6]) || 0, comment: x[7] || '' };
       if (x[0] === 'n') return { id: x[1], type: 'note', skin: Array.isArray(x[2]) ? x[2] : [], comment: x[3] || '', time: x[4], createdAtMs: Number(x[5]) || 0 };
+      if (x[0] === 's') return { id: x[1], type: 'sleep', hours: Number(x[2]) || 0, quality: x[3] || 'Calm', time: x[4], createdAtMs: Number(x[5]) || 0, comment: x[6] || '' };
+      if (x[0] === 'f') return { id: x[1], type: 'food', quality: x[2] || 'Ate well', title: x[3] || '', time: x[4], createdAtMs: Number(x[5]) || 0, comment: x[6] || '' };
+      if (x[0] === 'd') return { id: x[1], type: 'diaper', diaperType: x[2] || 'wet', stool: x[3] || '', time: x[4], createdAtMs: Number(x[5]) || 0, comment: x[6] || '' };
+      if (x[0] === 'b') return { id: x[1], type: 'breathing', breathingTags: Array.isArray(x[2]) ? x[2] : [], respRate: Number(x[3]) || null, time: x[4], createdAtMs: Number(x[5]) || 0, comment: x[6] || '' };
+      if (x[0] === 'p') return { id: x[1], type: 'pulse', bpm: Number(x[2]) || 95, time: x[3], createdAtMs: Number(x[4]) || 0, comment: x[5] || '' };
+      if (x[0] === 'c') return { id: x[1], type: 'custom', customName: x[2] || '', customVal: x[3] || '', customUnit: x[4] || '', time: x[5], createdAtMs: Number(x[6]) || 0, comment: x[7] || '' };
       return { id: x[1], type: 'water', title: 'Water', ml: Number(x[2]) || 0, wet: !!x[3], time: x[4], createdAtMs: Number(x[5]) || 0, comment: x[6] || '' };
     })
   };
@@ -2240,34 +2720,37 @@ function joinPartnerFamily() {
   joinPartnerCode(code, false);
 }
 
-async function saveTemp() {
+async function submitEntry(payload, localObj, toastMsg) {
   const c = child();
   if (!c) return;
-  const nowMs = Date.now();
-  const hhmm = nowHHMM();
-  const note = statusOf(draft.tempC).label;
-  const tempVal = draft.tempC;
-  const comment = (document.getElementById('tempCommentInput')?.value ?? draft.comment ?? '').trim();
-  draft.comment = '';
-
-  closeSheet();
-  state.tab = 'today';
-
   if (state.token) {
     try {
-      const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
-        type: 'temp', temp: tempVal, time: hhmm, note, comment, createdAtMs: nowMs
-      });
+      const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, payload);
       if (r.ok && r.data) {
         c.entries.unshift(normalizeServerEntry(r.data));
-        persist(); render(); toast(`Saved ${fmtT(tempVal).full}`);
+        persist(); render(); toast(toastMsg);
         return;
       }
     } catch {}
   }
+  c.entries.unshift(localObj);
+  persist(); render(); toast(toastMsg);
+}
 
-  c.entries.unshift({ id: 't' + nowMs, type: 'temp', tempC: tempVal, time: hhmm, note, comment, author: state.userName || 'Parent', createdAtMs: nowMs });
-  persist(); render(); toast(`Saved ${fmtT(tempVal).full}`);
+async function saveTemp() {
+  const c = child();
+  if (!c) return;
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  const note = statusOf(draft.tempC).label, tempVal = draft.tempC;
+  const comment = (document.getElementById('tempCommentInput')?.value ?? draft.comment ?? '').trim();
+  const photo = draft.photo || '';
+  draft.comment = ''; draft.photo = '';
+  closeSheet(); state.tab = 'today';
+  await submitEntry(
+    { type: 'temp', temp: tempVal, time: hhmm, note, comment, photo, createdAtMs: nowMs },
+    { id: 't' + nowMs, type: 'temp', tempC: tempVal, time: hhmm, note, comment, photo, author: state.userName || 'Parent', createdAtMs: nowMs },
+    `Saved ${fmtT(tempVal).full}`
+  );
 }
 
 async function saveMed() {
@@ -2275,65 +2758,39 @@ async function saveMed() {
   if (!c) return;
   const name = (document.getElementById('medNameInput')?.value || draft.medName || '').trim();
   if (!name) return toast('Write the medicine name first');
-
-  const nowMs = Date.now();
-  const hhmm = nowHHMM();
+  const nowMs = Date.now(), hhmm = nowHHMM();
   const doseStr = `${draft.dose} ${draft.medUnit}`;
   const comment = (document.getElementById('medCommentInput')?.value ?? draft.comment ?? '').trim();
-  draft.medName = '';
-  draft.comment = '';
+  const photo = draft.photo || '';
+  draft.medName = ''; draft.comment = ''; draft.photo = '';
   closeSheet();
-
-  if (state.token) {
-    try {
-      const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
-        type: 'med', title: name, dose: doseStr, med: `${name} ${doseStr}`, time: hhmm, note: '', comment, createdAtMs: nowMs
-      });
-      if (r.ok && r.data) {
-        c.entries.unshift(normalizeServerEntry(r.data));
-        persist(); render(); toast(`Logged ${name}`);
-        return;
-      }
-    } catch {}
-  }
-
-  c.entries.unshift({ id: 'm' + nowMs, type: 'med', title: name, dose: doseStr, time: hhmm, note: '', comment, author: state.userName || 'Parent', createdAtMs: nowMs });
-  persist(); render(); toast(`Logged ${name}`);
+  await submitEntry(
+    { type: 'med', title: name, dose: doseStr, med: `${name} ${doseStr}`, time: hhmm, note: '', comment, photo, createdAtMs: nowMs },
+    { id: 'm' + nowMs, type: 'med', title: name, dose: doseStr, time: hhmm, note: '', comment, photo, author: state.userName || 'Parent', createdAtMs: nowMs },
+    `Logged ${name}`
+  );
 }
 
 async function saveWater() {
   const c = child();
   if (!c) return;
   const { goalMl, todayMl } = waterBudget(c);
-  const nowMs = Date.now();
-  const hhmm = nowHHMM();
-  const mlVal = Math.max(1, Number(draft.ml) || 0);
-  const wetVal = draft.wet;
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  const mlVal = Math.max(1, Number(draft.ml) || 0), wetVal = draft.wet;
   const comment = (document.getElementById('waterCommentInput')?.value ?? draft.comment ?? '').trim();
-  draft.comment = '';
+  const photo = draft.photo || '';
+  draft.comment = ''; draft.photo = '';
   closeSheet();
-
   const newTotal = todayMl + mlVal;
   const newPct = Math.round((newTotal / goalMl) * 100);
   const doneMsg = newTotal > goalMl
     ? `Added +${fmtMl(mlVal)} · Over daily water norm (${newPct}%)`
     : `Added +${fmtMl(mlVal)}`;
-
-  if (state.token) {
-    try {
-      const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
-        type: 'water', title: 'Water', ml: mlVal, wet: wetVal, drink: `Water ${mlVal} ml`, time: hhmm, note: wetVal ? 'Wet diaper' : 'Hydration', comment, createdAtMs: nowMs
-      });
-      if (r.ok && r.data) {
-        c.entries.unshift(normalizeServerEntry(r.data));
-        persist(); render(); toast(doneMsg);
-        return;
-      }
-    } catch {}
-  }
-
-  c.entries.unshift({ id: 'w' + nowMs, type: 'water', title: 'Water', ml: mlVal, wet: wetVal, time: hhmm, comment, author: state.userName || 'Parent', createdAtMs: nowMs });
-  persist(); render(); toast(doneMsg);
+  await submitEntry(
+    { type: 'water', title: 'Water', ml: mlVal, wet: wetVal, drink: `Water ${mlVal} ml`, time: hhmm, note: wetVal ? 'Wet diaper' : 'Hydration', comment, photo, createdAtMs: nowMs },
+    { id: 'w' + nowMs, type: 'water', title: 'Water', ml: mlVal, wet: wetVal, time: hhmm, comment, photo, author: state.userName || 'Parent', createdAtMs: nowMs },
+    doneMsg
+  );
 }
 
 async function saveNote() {
@@ -2343,33 +2800,119 @@ async function saveNote() {
   const comment = (document.getElementById('noteCommentInput')?.value ?? draft.comment ?? '').trim();
   const skin = [...draft.skinSelected];
   if (customSkin && !skin.includes(customSkin)) skin.push(customSkin);
-
-  if (!skin.length && !comment) {
-    return toast('Pick a skin cover choice or write a comment first');
-  }
-
-  const nowMs = Date.now();
-  const hhmm = nowHHMM();
-  draft.skinSelected = [];
-  draft.skinCustom = '';
-  draft.comment = '';
+  const photo = draft.photo || '';
+  if (!skin.length && !comment && !photo) return toast('Pick a skin cover, write a note, or add a photo');
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  draft.skinSelected = []; draft.skinCustom = ''; draft.comment = ''; draft.photo = '';
   closeSheet();
+  await submitEntry(
+    { type: 'note', skin, comment, photo, time: hhmm, note: 'Observation', createdAtMs: nowMs },
+    { id: 'n' + nowMs, type: 'note', skin, comment, photo, time: hhmm, note: 'Observation', author: state.userName || 'Parent', createdAtMs: nowMs },
+    'Saved skin & comment'
+  );
+}
 
-  if (state.token) {
-    try {
-      const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, {
-        type: 'note', skin, comment, time: hhmm, note: 'Observation', createdAtMs: nowMs
-      });
-      if (r.ok && r.data) {
-        c.entries.unshift(normalizeServerEntry(r.data));
-        persist(); render(); toast('Saved skin & comment');
-        return;
-      }
-    } catch {}
-  }
+async function saveSleep() {
+  const c = child();
+  if (!c) return;
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  const hours = draft.sleepHours, quality = draft.sleepQuality;
+  const comment = (document.getElementById('sleepCommentInput')?.value ?? draft.comment ?? '').trim();
+  const photo = draft.photo || '';
+  draft.comment = ''; draft.photo = '';
+  closeSheet();
+  await submitEntry(
+    { type: 'sleep', hours, quality, comment, photo, time: hhmm, createdAtMs: nowMs },
+    { id: 's' + nowMs, type: 'sleep', hours, quality, comment, photo, time: hhmm, author: state.userName || 'Parent', createdAtMs: nowMs },
+    `Saved sleep (${fmtHours(hours)})`
+  );
+}
 
-  c.entries.unshift({ id: 'n' + nowMs, type: 'note', skin, comment, time: hhmm, note: 'Observation', author: state.userName || 'Parent', createdAtMs: nowMs });
-  persist(); render(); toast('Saved skin & comment');
+async function saveFood() {
+  const c = child();
+  if (!c) return;
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  const quality = draft.foodAppetite;
+  const title = (document.getElementById('foodTextInput')?.value ?? draft.foodText ?? '').trim();
+  const comment = (document.getElementById('foodCommentInput')?.value ?? draft.comment ?? '').trim();
+  const photo = draft.photo || '';
+  draft.foodText = ''; draft.comment = ''; draft.photo = '';
+  closeSheet();
+  await submitEntry(
+    { type: 'food', quality, title, comment, photo, time: hhmm, createdAtMs: nowMs },
+    { id: 'f' + nowMs, type: 'food', quality, title, comment, photo, time: hhmm, author: state.userName || 'Parent', createdAtMs: nowMs },
+    `Saved food (${quality})`
+  );
+}
+
+async function saveDiaper() {
+  const c = child();
+  if (!c) return;
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  const diaperType = draft.diaperType;
+  const stool = diaperType !== 'wet' ? draft.stool : '';
+  const comment = (document.getElementById('diaperCommentInput')?.value ?? draft.comment ?? '').trim();
+  const photo = draft.photo || '';
+  draft.comment = ''; draft.photo = '';
+  closeSheet();
+  await submitEntry(
+    { type: 'diaper', diaperType, stool, comment, photo, time: hhmm, createdAtMs: nowMs },
+    { id: 'd' + nowMs, type: 'diaper', diaperType, stool, comment, photo, time: hhmm, author: state.userName || 'Parent', createdAtMs: nowMs },
+    'Saved diaper log'
+  );
+}
+
+async function saveBreathing() {
+  const c = child();
+  if (!c) return;
+  const breathingTags = [...draft.breathingTags];
+  const respRate = draft.respRate > 0 ? draft.respRate : null;
+  const comment = (document.getElementById('breathingCommentInput')?.value ?? draft.comment ?? '').trim();
+  const photo = draft.photo || '';
+  if (!breathingTags.length && !respRate && !comment && !photo) return toast('Pick a breathing option or set rate');
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  draft.breathingTags = []; draft.respRate = 0; draft.comment = ''; draft.photo = '';
+  closeSheet();
+  await submitEntry(
+    { type: 'breathing', breathingTags, respRate, comment, photo, time: hhmm, createdAtMs: nowMs },
+    { id: 'b' + nowMs, type: 'breathing', breathingTags, respRate, comment, photo, time: hhmm, author: state.userName || 'Parent', createdAtMs: nowMs },
+    'Saved breathing check'
+  );
+}
+
+async function savePulse() {
+  const c = child();
+  if (!c) return;
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  const bpm = Math.max(40, Math.min(220, Number(draft.bpm) || 95));
+  const comment = (document.getElementById('pulseCommentInput')?.value ?? draft.comment ?? '').trim();
+  const photo = draft.photo || '';
+  draft.comment = ''; draft.photo = '';
+  closeSheet();
+  await submitEntry(
+    { type: 'pulse', bpm, comment, photo, time: hhmm, createdAtMs: nowMs },
+    { id: 'p' + nowMs, type: 'pulse', bpm, comment, photo, time: hhmm, author: state.userName || 'Parent', createdAtMs: nowMs },
+    `Saved pulse (${bpm} bpm)`
+  );
+}
+
+async function saveCustom() {
+  const c = child();
+  if (!c) return;
+  const customName = (document.getElementById('customNameInput')?.value ?? draft.customName ?? '').trim();
+  const customVal = (document.getElementById('customValInput')?.value ?? draft.customVal ?? '').trim();
+  const customUnit = (document.getElementById('customUnitInput')?.value ?? draft.customUnit ?? '').trim();
+  const comment = (document.getElementById('customCommentInput')?.value ?? draft.comment ?? '').trim();
+  const photo = draft.photo || '';
+  if (!customName || !customVal) return toast('Enter parameter name and value');
+  const nowMs = Date.now(), hhmm = nowHHMM();
+  draft.customName = ''; draft.customVal = ''; draft.customUnit = ''; draft.comment = ''; draft.photo = '';
+  closeSheet();
+  await submitEntry(
+    { type: 'custom', customName, customVal, customUnit, comment, photo, time: hhmm, createdAtMs: nowMs },
+    { id: 'u' + nowMs, type: 'custom', customName, customVal, customUnit, comment, photo, time: hhmm, author: state.userName || 'Parent', createdAtMs: nowMs },
+    `Saved ${customName}`
+  );
 }
 
 async function deleteEntry(id) {
@@ -2396,13 +2939,11 @@ async function undoDelete() {
 
   if (state.token) {
     try {
-      const payload = entry.type === 'temp'
-        ? { type: 'temp', temp: entry.tempC, time: entry.time, note: entry.note, comment: entry.comment || '', createdAtMs: entry.createdAtMs || Date.now() }
-        : entry.type === 'med'
-          ? { type: 'med', title: entry.title, dose: entry.dose, med: `${entry.title} ${entry.dose}`, time: entry.time, note: entry.note, comment: entry.comment || '', createdAtMs: entry.createdAtMs || Date.now() }
-          : entry.type === 'note'
-            ? { type: 'note', skin: entry.skin || [], comment: entry.comment || '', time: entry.time, note: 'Observation', createdAtMs: entry.createdAtMs || Date.now() }
-            : { type: 'water', title: 'Water', ml: entry.ml, wet: entry.wet, drink: `Water ${entry.ml} ml`, time: entry.time, comment: entry.comment || '', createdAtMs: entry.createdAtMs || Date.now() };
+      const payload = {
+        ...entry,
+        temp: entry.type === 'temp' ? entry.tempC : null,
+        createdAtMs: entry.createdAtMs || Date.now()
+      };
       const r = await apiCall('POST', `/api/children/${encodeURIComponent(c.id)}/entries`, payload);
       if (r.ok && r.data) {
         c.entries.splice(idx, 0, normalizeServerEntry(r.data));

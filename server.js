@@ -161,7 +161,7 @@ function parseJsonBody(req) {
         let body = '';
         req.on('data', chunk => {
             body += chunk;
-            if (body.length > 2 * 1024 * 1024) {
+            if (body.length > 5 * 1024 * 1024) {
                 req.destroy();
                 reject(new Error('Payload too large'));
             }
@@ -513,7 +513,8 @@ const server = http.createServer(async (req, res) => {
 
                 const body = await parseJsonBody(req);
                 const nowMs = body.createdAtMs || Date.now();
-                const entryType = ['temp', 'med', 'water', 'note'].includes(body.type)
+                const VALID_TYPES = ['temp', 'med', 'water', 'note', 'sleep', 'food', 'diaper', 'breathing', 'pulse', 'custom'];
+                const entryType = VALID_TYPES.includes(body.type)
                     ? body.type
                     : (body.med ? 'med' : (body.drink || body.ml ? 'water' : (body.skin || body.comment ? 'note' : 'temp')));
 
@@ -529,7 +530,12 @@ const server = http.createServer(async (req, res) => {
                 const skinList = Array.isArray(body.skin)
                     ? body.skin.map(s => String(s || '').trim()).filter(Boolean).slice(0, 12)
                     : (body.skin ? [String(body.skin).trim()].filter(Boolean) : []);
-                const commentStr = body.comment ? String(body.comment).trim().slice(0, 600) : '';
+                const breathingTags = Array.isArray(body.breathingTags)
+                    ? body.breathingTags.map(s => String(s || '').trim()).filter(Boolean).slice(0, 12)
+                    : [];
+                const commentStr = body.comment ? String(body.comment).trim().slice(0, 800) : '';
+                const rawPhoto = typeof body.photo === 'string' ? body.photo.trim() : '';
+                const safePhoto = (rawPhoto.startsWith('data:image/') && rawPhoto.length <= 450000) ? rawPhoto : '';
 
                 child.points48h.forEach(p => {
                     if (p.createdAtMs) p.hours_ago = +((nowMs - p.createdAtMs) / 3600000).toFixed(2);
@@ -540,15 +546,26 @@ const server = http.createServer(async (req, res) => {
                     id: 'e_' + nowMs + '_' + crypto.randomBytes(2).toString('hex'),
                     type: entryType,
                     temp: tempVal,
-                    title: body.title ? String(body.title).trim() : null,
-                    dose: body.dose ? String(body.dose).trim() : null,
+                    title: body.title ? String(body.title).trim().slice(0, 140) : null,
+                    dose: body.dose ? String(body.dose).trim().slice(0, 60) : null,
                     ml: finalMl,
                     wet: !!body.wet,
                     skin: skinList,
                     comment: commentStr,
+                    photo: safePhoto,
+                    hours: body.hours !== undefined && body.hours !== null && !Number.isNaN(Number(body.hours)) ? Number(body.hours) : null,
+                    quality: body.quality ? String(body.quality).trim().slice(0, 60) : '',
+                    diaperType: body.diaperType ? String(body.diaperType).trim().slice(0, 20) : '',
+                    stool: body.stool ? String(body.stool).trim().slice(0, 60) : '',
+                    breathingTags,
+                    respRate: body.respRate !== undefined && body.respRate !== null && !Number.isNaN(Number(body.respRate)) ? Number(body.respRate) : null,
+                    bpm: body.bpm !== undefined && body.bpm !== null && !Number.isNaN(Number(body.bpm)) ? Number(body.bpm) : null,
+                    customName: body.customName ? String(body.customName).trim().slice(0, 80) : '',
+                    customVal: body.customVal !== undefined && body.customVal !== null ? String(body.customVal).trim().slice(0, 60) : '',
+                    customUnit: body.customUnit ? String(body.customUnit).trim().slice(0, 30) : '',
                     drink: entryType === 'water' ? `Water ${finalMl} ml` : (body.drink ? String(body.drink).trim() : null),
                     med: body.med ? String(body.med).trim() : null,
-                    note: (body.note || (entryType === 'temp' ? 'Reading' : entryType === 'med' ? '' : entryType === 'note' ? 'Observation' : 'Hydration')).trim(),
+                    note: (body.note || (entryType === 'temp' ? 'Reading' : entryType === 'med' ? '' : entryType === 'water' ? 'Hydration' : '')).trim(),
                     time: body.time ? String(body.time).trim() : null,
                     author: activeUser.name || 'Parent',
                     hours_ago: 0,
