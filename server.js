@@ -126,6 +126,23 @@ function generateFamilyCode() {
     return code;
 }
 
+function dailyWaterGoalMl(ageYr, weightKg) {
+    const a = Number(ageYr);
+    if (a > 0) {
+        if (a < 0.5) return 700;
+        if (a < 1) return 800;
+        if (a < 2) return 1000;
+        if (a < 4) return 1200;
+        if (a < 6) return 1400;
+        if (a < 9) return 1600;
+        if (a < 12) return 1900;
+        if (a < 14) return 2100;
+        return 2400;
+    }
+    const w = Number(weightKg) || 12;
+    return w <= 10 ? Math.round(w * 100) : Math.round(1000 + (w - 10) * 50);
+}
+
 // -------------------------------------------------------------
 // HTTP REQUEST HELPERS
 // -------------------------------------------------------------
@@ -504,6 +521,20 @@ const server = http.createServer(async (req, res) => {
                 const tempVal = entryType === 'temp' ? (Number.isNaN(parsedTemp) ? 37.0 : parsedTemp) : null;
 
                 child.points48h = Array.isArray(child.points48h) ? child.points48h : [];
+
+                let finalMl = body.ml !== undefined && body.ml !== null ? Number(body.ml) : null;
+                if (entryType === 'water') {
+                    const goalMl = dailyWaterGoalMl(child.age, child.weight);
+                    const currentMl = child.points48h
+                        .filter(p => p.type === 'water' || (!p.type && (p.drink || p.ml)))
+                        .reduce((s, p) => s + (Number(p.ml) || 0), 0);
+                    const remainingMl = Math.max(0, goalMl - currentMl);
+                    if (remainingMl <= 0) {
+                        return sendJson(res, 400, { success: false, message: 'Daily water goal (100%) already reached' });
+                    }
+                    finalMl = Math.max(1, Math.min(Number(finalMl) || 0, remainingMl));
+                }
+
                 child.points48h.forEach(p => {
                     if (p.createdAtMs) p.hours_ago = +((nowMs - p.createdAtMs) / 3600000).toFixed(2);
                     else p.hours_ago = Math.min(48, (p.hours_ago || 0) + 1);
@@ -515,9 +546,9 @@ const server = http.createServer(async (req, res) => {
                     temp: tempVal,
                     title: body.title ? String(body.title).trim() : null,
                     dose: body.dose ? String(body.dose).trim() : null,
-                    ml: body.ml !== undefined && body.ml !== null ? Number(body.ml) : null,
+                    ml: finalMl,
                     wet: !!body.wet,
-                    drink: body.drink ? String(body.drink).trim() : null,
+                    drink: entryType === 'water' ? `Water ${finalMl} ml` : (body.drink ? String(body.drink).trim() : null),
                     med: body.med ? String(body.med).trim() : null,
                     note: (body.note || (entryType === 'temp' ? 'Reading' : entryType === 'med' ? 'Medicine' : 'Hydration')).trim(),
                     time: body.time ? String(body.time).trim() : null,

@@ -1477,6 +1477,14 @@ let pendingRender = false;
 let syncSource = null;
 let syncReconnectTimer = null;
 
+function waterBudget(c) {
+  const goalMl = c ? dailyWaterGoalMl(c.age, c.weightKg) : 1200;
+  const todayMl = c ? c.entries.filter(e => e.type === 'water').reduce((s, w) => s + (w.ml || 0), 0) : 0;
+  const remainingMl = Math.max(0, goalMl - todayMl);
+  const maxAddMl = Math.min(500, remainingMl);
+  return { goalMl, todayMl, remainingMl, maxAddMl };
+}
+
 function openSheet(name) {
   sheet = name;
   if (name === 'temp') {
@@ -1484,6 +1492,11 @@ function openSheet(name) {
     draft.tempC = t ? t.tempC : 37.0;
   }
   if (name === 'med') draft.medName = '';
+  if (name === 'water') {
+    const { remainingMl } = waterBudget(child());
+    draft.ml = remainingMl > 0 ? Math.min(draft.ml || 120, remainingMl) : 0;
+    if (remainingMl > 0 && draft.ml <= 0) draft.ml = Math.min(120, remainingMl);
+  }
   renderSheet();
   document.getElementById('sheetBg').classList.add('open');
 }
@@ -1525,9 +1538,14 @@ function waterLabelOf(ml) {
 function updateWaterFromPointer(clientX) {
   const cap = document.getElementById('waterCapillary');
   if (!cap) return;
+  const { remainingMl, maxAddMl } = waterBudget(child());
+  if (remainingMl <= 0) return;
+  const minVal = Math.min(10, maxAddMl);
   const r = cap.getBoundingClientRect();
   const ratio = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-  draft.ml = Math.max(10, Math.min(500, Math.round((10 + ratio * 490) / 5) * 5));
+  const raw = minVal + ratio * Math.max(0, maxAddMl - minVal);
+  const snapped = maxAddMl >= 10 ? Math.round(raw / 5) * 5 : Math.round(raw);
+  draft.ml = Math.max(minVal, Math.min(maxAddMl, snapped));
   renderSheet();
 }
 
@@ -1607,56 +1625,72 @@ function renderSheet() {
       </div>
       <button onclick="saveMed()" class="w-full py-3.5 rounded-full text-sm font-bold text-white cursor-pointer" style="background: var(--med);">Save Medicine</button>`;
   } else if (sheet === 'water') {
-    const wFillPct = Math.max(4, Math.min(100, ((Math.min(500, draft.ml) - 10) / 490) * 100));
-    const wLabels = [0, 100, 200, 300, 400, 500];
-    const ozParts = (draft.ml / 29.5735).toFixed(1).split('.');
-    const wReadout = state.unit === 'imperial'
-      ? `<span class="text-[46px] leading-none">${ozParts[0]}</span><span class="text-2xl opacity-80">.${ozParts[1]} oz</span>`
-      : `<span class="text-[46px] leading-none">${Math.round(draft.ml)}</span><span class="text-2xl opacity-80"> ml</span>`;
-    const todayMl = c ? c.entries.filter(e => e.type === 'water').reduce((s, w) => s + (w.ml || 0), 0) : 0;
-    const goalMl = c ? dailyWaterGoalMl(c.age, c.weightKg) : 1200;
-    b.innerHTML = `
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-bold">Log Water</h3>
-        <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
-      </div>
-      <div class="soft-pill rounded-3xl p-5 mb-4">
-        <div class="text-center mb-1">
-          <span class="inline-block px-3 py-1 rounded-full text-xs font-bold" style="background: var(--card-solid); color: var(--water);">${waterLabelOf(draft.ml)}</span>
+    const { goalMl, todayMl, remainingMl, maxAddMl } = waterBudget(c);
+    if (remainingMl <= 0) {
+      b.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold">Log Water</h3>
+          <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
         </div>
-        <div class="flex items-center justify-between gap-2 mb-5">
-          <button onclick="draft.ml=Math.max(5,draft.ml-10); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">−</button>
-          <div class="tabular font-bold">${wReadout}</div>
-          <button onclick="draft.ml=Math.min(1000,draft.ml+10); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">+</button>
+        <div class="soft-pill rounded-3xl p-6 text-center space-y-2 mb-5">
+          <span class="inline-block px-3 py-1 rounded-full text-xs font-bold" style="background: var(--card-solid); color: var(--water);">100% Daily Goal Reached</span>
+          <div class="text-[40px] font-bold tabular leading-tight pt-1" style="color: var(--ink);">${fmtMl(todayMl)}</div>
+          <div class="text-xs tabular" style="color: var(--muted);">Reached ${fmtMl(goalMl)} daily limit (${c ? c.age : 4} yr). Delete an entry in Today to adjust.</div>
         </div>
-        <div class="thermo-body" onpointerdown="startWaterDrag(event)">
-          <div class="thermo-bulb flex items-center justify-center text-white" style="background: linear-gradient(135deg, #38BDF8 0%, #0EA5E9 100%);">
-            <svg class="w-4 h-4 relative z-10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7 6.3 10.6a7 7 0 1 0 11.4 0L12 2.7z"/></svg>
+        <button onclick="closeSheet()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0EA5E9;">Done</button>`;
+    } else {
+      draft.ml = Math.max(Math.min(5, remainingMl), Math.min(remainingMl, draft.ml || Math.min(120, remainingMl)));
+      const minVal = Math.min(10, maxAddMl);
+      const span = Math.max(1, maxAddMl - minVal);
+      const wFillPct = Math.max(4, Math.min(100, ((Math.min(maxAddMl, draft.ml) - minVal) / span) * 100));
+      const wLabels = [0, 0.2, 0.4, 0.6, 0.8, 1].map(f => Math.round((maxAddMl * f) / 5) * 5);
+      const ozParts = (draft.ml / 29.5735).toFixed(1).split('.');
+      const wReadout = state.unit === 'imperial'
+        ? `<span class="text-[46px] leading-none">${ozParts[0]}</span><span class="text-2xl opacity-80">.${ozParts[1]} oz</span>`
+        : `<span class="text-[46px] leading-none">${Math.round(draft.ml)}</span><span class="text-2xl opacity-80"> ml</span>`;
+      b.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold">Log Water</h3>
+          <button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Close</button>
+        </div>
+        <div class="soft-pill rounded-3xl p-5 mb-4">
+          <div class="text-center mb-1">
+            <span class="inline-block px-3 py-1 rounded-full text-xs font-bold" style="background: var(--card-solid); color: var(--water);">${waterLabelOf(draft.ml)}</span>
           </div>
-          <div class="thermo-stem-outer">
-            <div id="waterCapillary" class="thermo-capillary">
-              <div class="thermo-mercury" style="width:${wFillPct.toFixed(1)}%; background:linear-gradient(90deg, #7DD3FC 0%, #0EA5E9 100%); color:#0EA5E9;">
-                <div class="thermo-knob"></div>
-              </div>
+          <div class="flex items-center justify-between gap-2 mb-5">
+            <button onclick="draft.ml=Math.max(${Math.min(5, remainingMl)},draft.ml-10); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">−</button>
+            <div class="tabular font-bold">${wReadout}</div>
+            <button onclick="draft.ml=Math.min(${remainingMl},draft.ml+10); renderSheet();" class="w-11 h-11 rounded-full text-2xl font-bold cursor-pointer" style="background: var(--card-solid);">+</button>
+          </div>
+          <div class="thermo-body" onpointerdown="startWaterDrag(event)">
+            <div class="thermo-bulb flex items-center justify-center text-white" style="background: linear-gradient(135deg, #38BDF8 0%, #0EA5E9 100%);">
+              <svg class="w-4 h-4 relative z-10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.7 6.3 10.6a7 7 0 1 0 11.4 0L12 2.7z"/></svg>
             </div>
-            <div class="thermo-sheen"></div>
+            <div class="thermo-stem-outer">
+              <div id="waterCapillary" class="thermo-capillary">
+                <div class="thermo-mercury" style="width:${wFillPct.toFixed(1)}%; background:linear-gradient(90deg, #7DD3FC 0%, #0EA5E9 100%); color:#0EA5E9;">
+                  <div class="thermo-knob"></div>
+                </div>
+              </div>
+              <div class="thermo-sheen"></div>
+            </div>
           </div>
+          <div class="pl-11 pr-2 mt-2">
+            <div class="flex justify-between items-start h-2.5 mb-0.5">
+              ${Array.from({length: 21}).map((_, i) => `<span style="width:1.5px; height:${i%4===0?'10px':'5px'}; background:var(--muted); opacity:${i%4===0?0.65:0.30}; border-radius:2px;"></span>`).join('')}
+            </div>
+            <div class="flex justify-between text-xs tabular" style="color: var(--muted);">
+              ${wLabels.map(v => `<span>${state.unit==='imperial' ? Math.round(v/29.5735) + 'oz' : v}</span>`).join('')}
+            </div>
+          </div>
+          <div class="text-center text-xs mt-2.5 tabular" style="color: var(--muted);">Today: ${fmtMl(todayMl)} / ${fmtMl(goalMl)} · ${fmtMl(remainingMl)} left (100% max)</div>
         </div>
-        <div class="pl-11 pr-2 mt-2">
-          <div class="flex justify-between items-start h-2.5 mb-0.5">
-            ${Array.from({length: 21}).map((_, i) => `<span style="width:1.5px; height:${i%4===0?'10px':'5px'}; background:var(--muted); opacity:${i%4===0?0.65:0.30}; border-radius:2px;"></span>`).join('')}
-          </div>
-          <div class="flex justify-between text-xs tabular" style="color: var(--muted);">
-            ${wLabels.map(v => `<span>${state.unit==='imperial' ? Math.round(v/29.5735) + 'oz' : v}</span>`).join('')}
-          </div>
-        </div>
-        <div class="text-center text-xs mt-2.5 tabular" style="color: var(--muted);">Today: ${fmtMl(todayMl)} / ${fmtMl(goalMl)} (${c ? c.age : 4} yr goal)</div>
-      </div>
-      <button onclick="draft.wet=!draft.wet; renderSheet();" class="w-full soft-pill rounded-2xl px-4 py-3.5 flex items-center justify-between mb-5 cursor-pointer">
-        <span class="text-xs font-bold">Also had a wet diaper</span>
-        <span class="text-xs font-bold" style="color: var(--water);">${draft.wet ? '✓ Yes' : 'No'}</span>
-      </button>
-      <button onclick="saveWater()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0EA5E9;">Add +${fmtMl(draft.ml)}</button>`;
+        <button onclick="draft.wet=!draft.wet; renderSheet();" class="w-full soft-pill rounded-2xl px-4 py-3.5 flex items-center justify-between mb-5 cursor-pointer">
+          <span class="text-xs font-bold">Also had a wet diaper</span>
+          <span class="text-xs font-bold" style="color: var(--water);">${draft.wet ? '✓ Yes' : 'No'}</span>
+        </button>
+        <button onclick="saveWater()" class="w-full py-4 rounded-full text-sm font-bold text-white cursor-pointer" style="background: #0EA5E9;">Add +${fmtMl(draft.ml)}</button>`;
+    }
   } else if (sheet === 'themes') {
     b.innerHTML = `
       <div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold">Choose Color Theme</h3><button onclick="closeSheet()" class="soft-pill px-3 py-1 rounded-full text-xs font-semibold cursor-pointer">Done</button></div>
@@ -2138,9 +2172,15 @@ async function saveMed() {
 async function saveWater() {
   const c = child();
   if (!c) return;
+  const { goalMl, remainingMl } = waterBudget(c);
+  if (remainingMl <= 0) {
+    closeSheet();
+    toast(`Daily water limit (100% · ${fmtMl(goalMl)}) reached`);
+    return;
+  }
   const nowMs = Date.now();
   const hhmm = nowHHMM();
-  const mlVal = draft.ml;
+  const mlVal = Math.max(1, Math.min(draft.ml, remainingMl));
   const wetVal = draft.wet;
   closeSheet();
 
@@ -2151,7 +2191,12 @@ async function saveWater() {
       });
       if (r.ok && r.data) {
         c.entries.unshift(normalizeServerEntry(r.data));
-        persist(); render(); toast(`Added +${fmtMl(mlVal)}`);
+        persist(); render(); toast(`Added +${fmtMl(r.data.ml || mlVal)}`);
+        return;
+      }
+      if (r.isApiJson && !r.ok) {
+        toast(r.message || 'Daily water limit (100%) reached');
+        syncFromServer({ force: true });
         return;
       }
     } catch {}
